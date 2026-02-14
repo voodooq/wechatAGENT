@@ -47,7 +47,9 @@ class Config:
             if env_val:
                 # 尝试进行类型转换
                 orig_val = getattr(self, key)
-                if isinstance(orig_val, int):
+                if isinstance(orig_val, bool):
+                    setattr(self, key, env_val.lower() in ("true", "1", "yes"))
+                elif isinstance(orig_val, int):
                     setattr(self, key, int(env_val))
                 elif isinstance(orig_val, float):
                     setattr(self, key, float(env_val))

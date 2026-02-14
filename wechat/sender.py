@@ -25,22 +25,33 @@ class WechatSender:
         self._cache_lock = threading.Lock()
 
     def is_recently_sent(self, receiver: str, content: str) -> bool:
-        """检查消息是否是最近由 AI 发送的"""
+        """检查消息是否是最近由 AI 发送的 (支持文本指纹与文件类型识别)"""
         # 兼容性处理：移除换行符和首尾空格进行比对
         clean_content = str(content).strip().replace("\n", "")
         fingerprint = hashlib.md5(clean_content.encode('utf-8')).hexdigest()
+        
         with self._cache_lock:
             for r, f in self._sent_cache:
-                if r == receiver and f == fingerprint:
-                    return True
+                if r == receiver:
+                    # 1. 文本哈希完全匹配
+                    if f == fingerprint:
+                        return True
+                    # 2. [v10.3] 模糊文件匹配：如果 AI 刚刚发送了语音/图片，且内容指纹为占位符
+                    if clean_content in ("[语音]", "[图片]", "[视频]", "[文件]") and f == clean_content:
+                        return True
         return False
 
     def _record_sent(self, receiver: str, content: str):
-        """记录发送存根"""
+        """记录发送存根 (文本)"""
         clean_content = str(content).strip().replace("\n", "")
         fingerprint = hashlib.md5(clean_content.encode('utf-8')).hexdigest()
         with self._cache_lock:
             self._sent_cache.append((receiver, fingerprint))
+
+    def _record_sent_type(self, receiver: str, msg_type_label: str):
+        """记录发送存根 (特殊类型占位符，如语音/图片)"""
+        with self._cache_lock:
+            self._sent_cache.append((receiver, msg_type_label))
 
     def _ensureWechat(self):
         """确保当前线程的微信连接可用"""
@@ -147,6 +158,7 @@ class WechatSender:
                 time.sleep(delay)
 
                 # 发送文件
+                self._record_sent_type(receiver, "[图片]")
                 wx.SendFiles(filepath=image_path, who=receiver)
                 logger.info(f"已发送图片 [{image_path}] 给 [{receiver}]")
                 
@@ -176,6 +188,9 @@ class WechatSender:
                 time.sleep(delay)
 
                 # 发送文件
+                # 如果是 MP3，优先标记为语音，便于 listener 拦截回环
+                type_label = "[语音]" if file_path.lower().endswith(".mp3") else "[文件]"
+                self._record_sent_type(receiver, type_label)
                 wx.SendFiles(filepath=file_path, who=receiver)
                 logger.info(f"已发送文件 [{file_path}] 给 [{receiver}]")
                 

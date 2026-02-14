@@ -48,6 +48,7 @@ class MessageProcessor:
                     )
                     
                     user_input = message.content
+                    logger.debug(f"[处理诊断] 内容=\"{message.content}\", 是否匹配语音={message.content.startswith('[语音]')}")
 
                     # --- [v10.2.2] 语音消息预处理逻辑 (增强模糊匹配) ---
                     if message.content.startswith("[语音]"):
@@ -97,8 +98,14 @@ class MessageProcessor:
                                 raise Exception("无法保存语音文件")
                                 
                         except Exception as e:
-                            logger.error(f"语音预处理环节崩溃: {e}")
-                            sender.sendMessage(message.sender, f"抱歉，我暂时无法听清这段语音: {e}")
+                            # [Fix v10.3.1] 针对 SelfMessage (自发消息) 产生的处理异常，实施静默处理，防止产生“无效识别报错”的回环
+                            # 在文件传输助手模式下，所有消息都是自发的，区分关键在于是否由 AI 发出
+                            is_self = type(message.raw).__name__ == 'SelfMessage'
+                            logger.error(f"语音预处理环节崩溃 ({'自发消息' if is_self else '用户消息'}): {e}")
+                            
+                            if not is_self:
+                                sender.sendMessage(message.sender, f"抱歉，我暂时无法听清这段语音: {e}")
+                            
                             msg_queue.task_done()
                             continue
 
@@ -132,14 +139,21 @@ class MessageProcessor:
                     # 通过微信发送回复
                     if reply:
                         try:
-                            sender.sendMessage(
-                                receiver=message.sender,
-                                content=reply,
-                            )
-                            logger.info(f"✅ 回复已发送给 [{message.sender}]")
+                            # [v10.3.2] 智能下发模式选择：如果开启了 TTS 且配置为“发送到微信”，则跳过文本
+                            is_pure_voice = getattr(conf, 'tts_enabled', False) and getattr(conf, 'tts_send_to_chat', False)
+                            
+                            if not is_pure_voice:
+                                sender.sendMessage(
+                                    receiver=message.sender,
+                                    content=reply,
+                                )
+                                logger.info(f"✅ 文本回复已发送给 [{message.sender}]")
+                            else:
+                                logger.info(f"🔇 已启用纯语音模式，准备下发语音文件给 [{message.sender}]")
+                                
                             # 记录到每日消息日志
                             daily_logger.info(f"[{message.sender}] {reply}")
-                            # [Fix v10.2.5] 稳定性加固：发送后强制冷却，降低由于频繁 COM 会话切换导致的 UI 锁冲突风险
+                            # 发送后强制冷却
                             time.sleep(1.0)
                             
                             # --- [v10.3] 语音播报增强 (TTS) ---

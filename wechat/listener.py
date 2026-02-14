@@ -153,6 +153,7 @@ class WechatListener:
                     for msg in one_msgs:
                         msg_type = getattr(msg, 'type', 'UNKNOWN')
                         msg_content = str(getattr(msg, 'content', ''))
+                        logger.debug(f"[监听诊断] 收到消息: from={who}, type={msg_type}, content={msg_content[:20]}")
                         
                         # 兼容性获取 is_self
                         msg_is_self = getattr(msg, 'is_self', None)
