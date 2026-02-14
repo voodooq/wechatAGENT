@@ -1,3 +1,7 @@
 """
-AI 智能助理 - 核心模块
+IronSentinel 核心模块
 """
+
+from .voice_handler import VoiceMessageHandler
+
+__all__ = ['VoiceMessageHandler']
