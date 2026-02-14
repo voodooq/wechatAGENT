@@ -1,166 +1,165 @@
 """
-语音处理模块 - 处理微信语音消息
+语音消息处理模块 v1.0
+负责接收、存储、识别和回复语音消息
 """
 
 import os
-import tempfile
-import json
+import time
+import shutil
 from pathlib import Path
-import subprocess
 import logging
-import speech_recognition as sr
-from pydub import AudioSegment
 
 logger = logging.getLogger(__name__)
 
-class VoiceHandler:
-    """处理语音消息的类"""
+class VoiceMessageHandler:
+    """语音消息处理器"""
     
-    def __init__(self):
-        self.supported_formats = ['.silk', '.amr', '.mp3', '.m4a', '.wav', '.ogg']
-        self.recognizer = sr.Recognizer()
-        
-    def process_wechat_voice(self, voice_file_path: str) -> str:
+    def __init__(self, base_dir="data/voice_messages"):
         """
-        处理微信语音消息
+        初始化语音处理器
+        
+        Args:
+            base_dir: 语音文件存储基础目录
+        """
+        self.base_dir = Path(base_dir)
+        self.ensure_directories()
+        
+    def ensure_directories(self):
+        """确保必要的目录存在"""
+        directories = [
+            self.base_dir,
+            self.base_dir / "received",
+            self.base_dir / "processed",
+            self.base_dir / "tts_output"
+        ]
+        
+        for directory in directories:
+            directory.mkdir(parents=True, exist_ok=True)
+            logger.info(f"确保目录存在: {directory}")
+    
+    def save_voice_message(self, voice_file_path, user_name="unknown"):
+        """
+        保存接收到的语音消息
+        
+        Args:
+            voice_file_path: 原始语音文件路径
+            user_name: 发送者名称
+            
+        Returns:
+            str: 保存后的文件路径
+        """
+        if not os.path.exists(voice_file_path):
+            raise FileNotFoundError(f"语音文件不存在: {voice_file_path}")
+        
+        # 生成唯一文件名
+        timestamp = int(time.time())
+        file_ext = Path(voice_file_path).suffix
+        new_filename = f"voice_{user_name}_{timestamp}{file_ext}"
+        
+        # 目标路径
+        target_path = self.base_dir / "received" / new_filename
+        
+        # 复制文件
+        shutil.copy2(voice_file_path, target_path)
+        logger.info(f"语音消息已保存: {target_path}")
+        
+        return str(target_path)
+    
+    def get_latest_voice_message(self, user_name=None):
+        """
+        获取最新的语音消息文件
+        
+        Args:
+            user_name: 可选，指定用户
+            
+        Returns:
+            str: 最新的语音文件路径，或None
+        """
+        received_dir = self.base_dir / "received"
+        
+        if not received_dir.exists():
+            return None
+        
+        # 获取所有语音文件
+        voice_files = []
+        for ext in ['.silk', '.amr', '.mp3', '.m4a', '.wav']:
+            voice_files.extend(received_dir.glob(f"*{ext}"))
+        
+        if not voice_files:
+            return None
+        
+        # 按修改时间排序
+        voice_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+        
+        # 如果指定用户，过滤用户文件
+        if user_name:
+            user_files = [f for f in voice_files if user_name in f.name]
+            if user_files:
+                return str(user_files[0])
+            return None
+        
+        return str(voice_files[0])
+    
+    def move_to_processed(self, voice_file_path):
+        """
+        将处理完成的语音文件移动到processed目录
+        
         Args:
             voice_file_path: 语音文件路径
-        Returns:
-            识别出的文本内容
         """
-        try:
-            # 检查文件是否存在
-            if not os.path.exists(voice_file_path):
-                return "语音文件不存在"
-            
-            # 获取文件扩展名
-            ext = os.path.splitext(voice_file_path)[1].lower()
-            
-            # 如果是微信 SILK 格式，需要先转换
-            if ext == '.silk':
-                return self._process_silk_voice(voice_file_path)
-            elif ext == '.amr':
-                return self._process_amr_voice(voice_file_path)
-            else:
-                # 其他格式直接识别
-                return self._recognize_speech(voice_file_path)
-                
-        except Exception as e:
-            logger.error(f"语音处理失败: {e}")
-            return f"语音识别失败: {str(e)}"
-    
-    def _process_silk_voice(self, silk_file_path: str) -> str:
-        """处理微信 SILK 格式语音"""
-        try:
-            # 创建临时文件
-            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp:
-                wav_file = tmp.name
-            
-            # 使用 ffmpeg 转换 SILK 到 WAV
-            cmd = ['ffmpeg', '-i', silk_file_path, '-ar', '16000', '-ac', '1', wav_file]
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            
-            if result.returncode != 0:
-                return f"SILK 转换失败: {result.stderr}"
-            
-            # 识别转换后的 WAV 文件
-            text = self._recognize_speech(wav_file)
-            
-            # 清理临时文件
-            os.unlink(wav_file)
-            
-            return text
-            
-        except Exception as e:
-            logger.error(f"SILK 处理失败: {e}")
-            return f"SILK 格式处理失败: {str(e)}"
-    
-    def _process_amr_voice(self, amr_file_path: str) -> str:
-        """处理 AMR 格式语音"""
-        try:
-            # 创建临时文件
-            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp:
-                wav_file = tmp.name
-            
-            # 使用 pydub 转换 AMR 到 WAV
-            audio = AudioSegment.from_file(amr_file_path, format="amr")
-            audio.export(wav_file, format="wav")
-            
-            # 识别转换后的 WAV 文件
-            text = self._recognize_speech(wav_file)
-            
-            # 清理临时文件
-            os.unlink(wav_file)
-            
-            return text
-            
-        except Exception as e:
-            logger.error(f"AMR 处理失败: {e}")
-            return f"AMR 格式处理失败: {str(e)}"
-    
-    def _recognize_speech(self, audio_file_path: str) -> str:
-        """识别语音文件内容"""
-        try:
-            # 使用 SpeechRecognition 库
-            with sr.AudioFile(audio_file_path) as source:
-                # 调整环境噪音
-                self.recognizer.adjust_for_ambient_noise(source)
-                audio_data = self.recognizer.record(source)
-                
-                # 尝试使用 Google 语音识别
-                try:
-                    text = self.recognizer.recognize_google(audio_data, language='zh-CN')
-                    return text
-                except sr.UnknownValueError:
-                    return "无法识别语音内容"
-                except sr.RequestError as e:
-                    return f"语音识别服务错误: {str(e)}"
-                    
-        except Exception as e:
-            logger.error(f"语音识别失败: {e}")
-            return f"语音识别失败: {str(e)}"
-    
-    def get_voice_duration(self, voice_file_path: str) -> float:
-        """获取语音时长（秒）"""
-        try:
-            if not os.path.exists(voice_file_path):
-                return 0.0
-            
-            # 使用 pydub 获取音频时长
-            audio = AudioSegment.from_file(voice_file_path)
-            return len(audio) / 1000.0  # 转换为秒
-                
-        except Exception as e:
-            logger.error(f"获取语音时长失败: {e}")
-            return 0.0
-    
-    def analyze_voice_message(self, voice_file_path: str) -> dict:
-        """分析语音消息，返回详细信息"""
-        result = {
-            "file_path": voice_file_path,
-            "exists": False,
-            "duration": 0.0,
-            "text": "",
-            "format": "",
-            "size": 0
-        }
+        if not os.path.exists(voice_file_path):
+            return
+        
+        file_name = Path(voice_file_path).name
+        target_path = self.base_dir / "processed" / file_name
         
         try:
-            if not os.path.exists(voice_file_path):
-                return result
-            
-            result["exists"] = True
-            result["format"] = os.path.splitext(voice_file_path)[1].lower()
-            result["size"] = os.path.getsize(voice_file_path)
-            result["duration"] = self.get_voice_duration(voice_file_path)
-            
-            # 如果语音时长超过1秒，尝试识别
-            if result["duration"] > 1.0:
-                result["text"] = self.process_wechat_voice(voice_file_path)
-            
-            return result
-            
+            shutil.move(voice_file_path, target_path)
+            logger.info(f"语音文件已移动到processed: {target_path}")
         except Exception as e:
-            logger.error(f"语音分析失败: {e}")
-            result["error"] = str(e)
-            return result
+            logger.error(f"移动语音文件失败: {e}")
+    
+    def save_tts_audio(self, audio_data, user_name="unknown", format="mp3"):
+        """
+        保存TTS生成的音频文件
+        
+        Args:
+            audio_data: 音频数据
+            user_name: 接收者名称
+            format: 音频格式
+            
+        Returns:
+            str: 保存的文件路径
+        """
+        timestamp = int(time.time())
+        filename = f"tts_{user_name}_{timestamp}.{format}"
+        file_path = self.base_dir / "tts_output" / filename
+        
+        # 这里需要根据实际的音频数据格式进行保存
+        # 暂时返回路径，实际保存逻辑需要根据TTS模块实现
+        return str(file_path)
+    
+    def cleanup_old_files(self, max_age_hours=24):
+        """
+        清理旧文件
+        
+        Args:
+            max_age_hours: 最大保留时间（小时）
+        """
+        current_time = time.time()
+        max_age_seconds = max_age_hours * 3600
+        
+        for subdir in ["received", "processed", "tts_output"]:
+            dir_path = self.base_dir / subdir
+            if not dir_path.exists():
+                continue
+            
+            for file_path in dir_path.iterdir():
+                if file_path.is_file():
+                    file_age = current_time - file_path.stat().st_mtime
+                    if file_age > max_age_seconds:
+                        try:
+                            file_path.unlink()
+                            logger.info(f"清理旧文件: {file_path}")
+                        except Exception as e:
+                            logger.error(f"清理文件失败 {file_path}: {e}")
