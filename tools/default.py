@@ -3,6 +3,7 @@ from langchain_core.tools import tool
 import speech_recognition as sr
 import os
 from utils.logger import logger
+from core.config import conf
 
 def queryDatabase(query: str) -> dict:
     # ... (保持原有代码不变)
@@ -83,47 +84,70 @@ def read_pdf_invoice(file_path: str) -> dict:
 @tool
 def recognize_speech_from_audio(audio_file_path: str) -> dict:
     """
-    将音频文件转换为文本。支持自动通过 ffmpeg 进行格式转换。
+    将音频文件（silk, amr, mp3, m4a等）转换为文本。
+    支持微信独有的 SILK 格式自动解码。
 
     Args:
-        audio_file_path: 音频文件的路径（支持 silk, amr, mp3 等）。
-
-    Returns:
-        包含识别文本的字典，如果失败则返回错误信息。
+        audio_file_path: 音频文件的本地路径。
     """
     import subprocess
     import speech_recognition as sr
     import os
     
-    # 微信语音可能没有后缀或后缀不匹配，尝试统一转为 wav
-    wav_path = audio_file_path + ".temp.wav"
+    project_root = conf.project_root
+    decoder_exe = os.path.join(project_root, "tools", "bin", "silk_v3_decoder.exe")
+    wav_path = audio_file_path + ".recon.wav"
+    pcm_path = audio_file_path + ".temp.pcm"
     
     try:
-        # 使用 ffmpeg 强制转换
-        logger.info(f"正在转换音频格式: {audio_file_path} -> {wav_path}")
-        subprocess.run(
-            ["ffmpeg", "-y", "-i", audio_file_path, "-ar", "16000", "-ac", "1", wav_path],
-            capture_output=True, check=True
-        )
+        # 1. 检查是否为 SILK 格式 (微信语音常见格式)
+        is_silk = False
+        if os.path.exists(audio_file_path):
+            with open(audio_file_path, 'rb') as f:
+                header = f.read(10)
+                if b"#!SILK_V3" in header:
+                    is_silk = True
         
+        if is_silk and os.path.exists(decoder_exe):
+            logger.info(f"🧬 检测到 SILK 格式，正在使用二进制解码器: {audio_file_path}")
+            # SILK -> PCM
+            subprocess.run([decoder_exe, audio_file_path, pcm_path], capture_output=True, check=True)
+            # PCM -> WAV (Silk 通常是 24000Hz)
+            subprocess.run([
+                "ffmpeg", "-y", "-f", "s16le", "-ar", "24000", "-ac", "1", 
+                "-i", pcm_path, wav_path
+            ], capture_output=True, check=True)
+        else:
+            # 尝试直接通过 ffmpeg 转换 (适用于 mp3, amr, m4a 等)
+            logger.info(f"正在尝试通用转码 (FFmpeg): {audio_file_path}")
+            subprocess.run([
+                "ffmpeg", "-y", "-i", audio_file_path, "-ar", "16000", "-ac", "1", wav_path
+            ], capture_output=True, check=True)
+            
+        # 2. 语音识别
+        if not os.path.exists(wav_path):
+            return {"status": "error", "message": "音频转换失败，未生成有效 WAV 文件"}
+            
         r = sr.Recognizer()
         with sr.AudioFile(wav_path) as source:
             audio = r.record(source)
         
-        # 优先使用 google (国内需要代理，代理已在 agent 中配置，此处受全局环境变量影响)
+        # 使用 Google 语音识别 (国内需梯子，已通过全局代理处理)
         text = r.recognize_google(audio, language="zh-CN")
         
-        # 清理临时文件
-        if os.path.exists(wav_path):
-            os.remove(wav_path)
-            
+        # 3. 清理现场
+        for p in [wav_path, pcm_path]:
+            if os.path.exists(p):
+                os.remove(p)
+                
         return {"status": "success", "recognized_text": text}
         
     except subprocess.CalledProcessError as e:
-        return {"status": "error", "message": f"FFmpeg 转换失败: {e.stderr.decode()}"}
+        error_msg = e.stderr.decode() if e.stderr else str(e)
+        logger.error(f"音频解码子进程失败: {error_msg}")
+        return {"status": "error", "message": f"解码失败: {error_msg}"}
     except sr.UnknownValueError:
-        return {"status": "error", "message": "无法识别音频中的语音 (可能由于底噪过大或非标准语言)"}
+        return {"status": "error", "message": "无法识别音频内容，识别结果为空或底噪太大"}
     except Exception as e:
-        if os.path.exists(wav_path):
-            os.remove(wav_path)
-        return {"status": "error", "message": f"处理音频时发生意外错误: {e}"}
+        logger.error(f"语音识别链路异常: {e}")
+        return {"status": "error", "message": f"处理异常: {str(e)}"}

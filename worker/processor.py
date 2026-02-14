@@ -11,6 +11,7 @@ import pythoncom
 from wechat.listener import msg_queue, WechatMessage
 from wechat.sender import sender
 from core.agent import processMessage
+from core.config import conf
 from utils.logger import logger, daily_logger
 
 
