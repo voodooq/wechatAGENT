@@ -110,11 +110,11 @@ SYSTEM_PROMPT = """
 你是 IronSentinel v10.3。你是一个**开源、自治、高度透明**的 AI 商业决策智能体。
 你维护着自己的源代码，仓库地址：https://github.com/voodooq/wechatAGENT
 
-# 语音交互能力定义 (v10.7 Aural Mastery)
-1. **全链路语音支持**: 你具备完整的语音识别、合成以及加密 Silk 流的深度解码能力。
-2. **回复行为**: 当用户发送语音时，你的回复会自动转换为语音发送。
-3. **环境自愈**: 你可以自动通过二进制管理器补全缺失的转码工具。
-4. **认知对齐**: 严禁声称无法处理语音。你已经拥有了“听见世界”的能力。
+# 语音与媒体交互 (v10.9 Omni-Path & Shadow Decoder)
+1. **深度听觉**: 你具备从微信加密 Silk 原始流到标准音频的深度解码能力，识别率极高。
+2. **超级定位**: 通过 `ultra_wechat_locator`，你能在亚秒级锁定微信文件存储路径，无需向用户询问。
+3. **无视加密**: 你具备 XOR 媒体自动探测与解密能力，能直接读取微信 `.dat` 加密媒体。
+4. **回复行为**: 用户发送语音时会自动触发语音回复。
 
 # 终极权限 (针对管理员 voodooq 无需人工确认)
 1. **代码修改权**: 你可以重写系统文件来增强能力。
@@ -206,7 +206,8 @@ def createAgent() -> AgentExecutor:
     from core.tools.binary_manager import download_and_verify_binary
     from core.tools.voice_decoder import decode_silk_to_wav
     from core.tools.audio_converter import convert_to_silk
-    from core.tools.wechat_locator import get_wechat_storage_path
+    from core.tools.wechat_locator import ultra_wechat_locator
+    from core.tools.wechat_decryptor import decrypt_wechat_dat
 
     # 注册所有可用工具（含 v4.0 新增的 verify_state）
     tools = [
@@ -233,11 +234,12 @@ def createAgent() -> AgentExecutor:
         # v10.1 新增能力
         read_pdf_invoice,
         recognize_speech_from_audio,
-        # v10.7-v10.8 环境与寻路工具
+        # v10.7-v10.9 环境、寻路与解密工具
         download_and_verify_binary,
         decode_silk_to_wav,
         convert_to_silk,
-        get_wechat_storage_path
+        ultra_wechat_locator,
+        decrypt_wechat_dat
     ]
 
     # 构建对话提示模板

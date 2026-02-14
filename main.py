@@ -93,6 +93,10 @@ def _checkEvolutionReports():
 
 def main():
     """程序主入口"""
+    # [v10.9] 权限守卫：确保具备跨目录访问权限 (如访问 Lenove 用户文档)
+    from kernel.privilege_guard import request_admin
+    request_admin()
+    
     _printBanner()
 
     # 安装全局异常处理
