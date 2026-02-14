@@ -22,9 +22,8 @@ def ultra_wechat_locator() -> str:
                 storage_path, _ = winreg.QueryValueEx(key, "FileSavePath")
         except: pass
 
-        # 2. 解析占位符
+        # 2. 解析占位符 (彻底解决系统账户差异：Administrator vs Lenove)
         if "MyDocuments:" in storage_path:
-            # 获取准确的文档路径
             cmd = 'powershell -NoProfile -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; [Environment]::GetFolderPath(\'MyDocuments\')"'
             doc_path = subprocess.check_output(cmd, shell=True, encoding='utf-8').strip()
             storage_path = storage_path.replace("MyDocuments:", doc_path)
@@ -33,6 +32,7 @@ def ultra_wechat_locator() -> str:
         wx_root = Path(storage_path) / "WeChat Files" if storage_path else None
         
         if not wx_root or not wx_root.exists():
+            # [v10.9 增强] 跨盘符深度扫描
             logger.info("注册表定位失效，启动跨盘符雷达扫描...")
             for drive in ["D:", "E:", "F:", "C:"]:
                 potential = Path(f"{drive}/WeChat Files")
@@ -58,5 +58,5 @@ def ultra_wechat_locator() -> str:
         return str(target.absolute())
 
     except Exception as e:
-        logger.error(f"❌ 探测异常: {str(e)}")
+        logger.error(f"❌ 路径探测异常: {str(e)}")
         return f"❌ 探测异常: {str(e)}"

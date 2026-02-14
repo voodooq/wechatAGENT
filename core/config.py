@@ -6,10 +6,11 @@ from dotenv import load_dotenv
 
 class Config:
     """
-    IronSentinel 全兼容配置加载器 (v10.6)
-    1. 支持自动探测微信存储路径。
+    IronSentinel 全兼容配置加载器 (v10.9.2)
+    1. 支持自动探测微信存储路径（注册表 + 跨盘搜寻）。
     2. 支持基于 .env 的多层配置覆盖。
     3. 自动注入代理配置。
+    4. 具备属性访问冲突防御。
     """
     _instance = None
     PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -36,7 +37,6 @@ class Config:
             self.whitelist = ["文件传输助手"]
 
         # 3. 环境变量优先级更高，执行覆盖
-        # 涵盖所有可能的配置键
         for key in list(self.__dict__.keys()):
             env_val = os.getenv(key.upper())
             if env_val:
@@ -54,11 +54,11 @@ class Config:
         self._post_init()
 
     def _post_init(self):
-        # 路径校准 (PROJECT_ROOT 由 property 维护，无需重复设置)
+        # 路径校准 (PROJECT_ROOT 由 property 维护)
         self.db_full_path = self.PROJECT_ROOT / getattr(self, 'db_path', 'data/work.db')
         self.log_full_dir = self.PROJECT_ROOT / 'logs'
         
-        # [v10.9] 核心配置与媒体解密协议
+        # [v10.9] 核心进化配置
         self.memory_window_size = int(getattr(self, 'memory_window_size', 10) or 10)
         self.xor_enabled = getattr(self, 'xor_enabled', True)
         
@@ -86,8 +86,9 @@ class Config:
                 if os.path.exists(res): return res
         except: pass
 
-        # 启发式兜底
-        for p in ["E:\\WeChat Files", "E:\\OneDrive - MSFT\\WeChat Files"]:
+        # 启发式搜寻 (D/E/F/C)
+        for drive in ["D:", "E:", "F:", "C:"]:
+            p = f"{drive}\\WeChat Files"
             if os.path.exists(p): return p
             
         return os.path.join(os.path.expanduser("~"), "Documents", "WeChat Files")
@@ -120,9 +121,10 @@ class Config:
             return self.__dict__[lower_name]
         return None
 
+# 实例化全局单例
 conf = Config()
 
-# 导出常用全局常量以增强兼容性
+# 导出常用全局常量以增强代码可读性
 PROJECT_ROOT = conf.project_root
 DATA_DIR = PROJECT_ROOT / "data"
 VOICE_MESSAGES_DIR = DATA_DIR / "voice_messages"

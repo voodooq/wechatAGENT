@@ -43,7 +43,7 @@ def _printBanner():
 def _printConfig():
     """打印当前配置 (v10.3)"""
     provider = getattr(conf, 'llm_provider', 'google').capitalize()
-    logger.info(f"AI 驱动: {provider} ({conf.model_name})")
+    logger.info(f"AI驱动: {provider} ({conf.model_name})")
     logger.info(f"微信白名单: {conf.whitelist}")
     logger.info(f"数据库路径: {conf.db_full_path}")
 
