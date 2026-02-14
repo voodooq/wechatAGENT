@@ -89,6 +89,34 @@ def sync_to_github(commit_msg: str):
         return f"❌ [同步失败] 无法推送到 GitHub: {e}。请检查 SSH 网络连接或权限。"
 
 @tool
+def report_evolution_progress(step_name: str, detail: str, report_to: str = "文件传输助手"):
+    """
+    [汇报] 在复杂的代码演化或环境搭建过程中，向用户同步阶段性进展。
+    
+    @param step_name: 阶段名称 (如 "依赖安装", "代码修改")
+    @param detail: 详细描述
+    @param report_to: 汇报对象
+    """
+    from wechat.sender import sender
+    from core.config import conf
+    
+    # 格式化汇报内容
+    msg = (
+        f"⏳ **IronSentinel 进化进度: {step_name}**\n"
+        f"--------------------------------\n"
+        f"📝 详情: {detail}\n"
+        f"🚀 状态: 正在推进中..."
+    )
+    
+    try:
+        sender.sendMessage(report_to, msg)
+        logger.info(f"已发送进度汇报: {step_name}")
+        return f"✅ 进度汇报已发送: {step_name}"
+    except Exception as e:
+        logger.error(f"发送进度汇报失败: {e}")
+        return f"⚠️ 汇报发送失败，但逻辑仍在继续: {e}"
+
+@tool
 def request_hot_reload(reason: str = "应用代码演化", report_to: str = "文件传输助手"):
     """
     重启系统以应用所有代码进化

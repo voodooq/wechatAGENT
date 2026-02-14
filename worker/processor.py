@@ -45,13 +45,63 @@ class MessageProcessor:
                         f"开始处理消息 [{message.sender}]: "
                         f"{message.content[:50]}..."
                     )
+                    
+                    user_input = message.content
+
+                    # --- [v10.2] 语音消息预处理逻辑 ---
+                    if message.content == "[语音]":
+                        try:
+                            logger.info(f"🎤 正在接收并转录语音消息来自 [{message.sender}]...")
+                            # 1. 发送中间状态反馈
+                            sender.sendMessage(message.sender, "🎤 正在聆听您的语音，请稍候...")
+                            
+                            # 2. 调用 wxauto 保存语音
+                            import os
+                            temp_dir = os.path.join(conf.project_root, "temp", "voice")
+                            os.makedirs(temp_dir, exist_ok=True)
+                            
+                            # 保存语音文件 (wxauto 的 msg 对象 SaveVoice 方法)
+                            save_path = message.raw.SaveVoice(savepath=temp_dir)
+                            if not save_path or not os.path.exists(save_path):
+                                # 某些版本 SaveVoice 不返回路径，需根据文件类型寻找
+                                logger.warning("SaveVoice 未返回路径，尝试在目录中搜索最新文件")
+                                files = [os.path.join(temp_dir, f) for f in os.listdir(temp_dir)]
+                                if files:
+                                    save_path = max(files, key=os.path.getmtime)
+                            
+                            if save_path and os.path.exists(save_path):
+                                logger.info(f"语音已保存: {save_path}")
+                                
+                                # 3. 调用工具进行识别
+                                from tools.default import recognize_speech_from_audio
+                                res = recognize_speech_from_audio(save_path)
+                                
+                                if res.get("status") == "success":
+                                    user_input = res.get("recognized_text", "")
+                                    logger.info(f"语音识别成功: {user_input}")
+                                    # 再次反馈识别结果
+                                    sender.sendMessage(message.sender, f"👂 我听到了: \"{user_input}\"")
+                                else:
+                                    error_msg = res.get("message", "识别失败")
+                                    logger.error(f"语音识别失败: {error_msg}")
+                                    sender.sendMessage(message.sender, f"❌ 语音识别失败: {error_msg}")
+                                    msg_queue.task_done()
+                                    continue
+                            else:
+                                raise Exception("无法保存语音文件")
+                                
+                        except Exception as e:
+                            logger.error(f"语音预处理环节崩溃: {e}")
+                            sender.sendMessage(message.sender, f"抱歉，我暂时无法听清这段语音: {e}")
+                            msg_queue.task_done()
+                            continue
 
                     # 调用 AI Agent 获取回复
                     try:
                         import asyncio
                         # [v7.3 Bridge] 在同步线程中调用异步的 processMessage
                         reply = asyncio.run(processMessage(
-                            userInput=message.content,
+                            userInput=user_input,
                             sender=message.sender,
                             role_level=message.role_level
                         ))

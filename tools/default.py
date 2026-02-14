@@ -80,25 +80,47 @@ def read_pdf_invoice(file_path: str) -> dict:
 
 def recognize_speech_from_audio(audio_file_path: str) -> dict:
     """
-    将音频文件转换为文本。
+    将音频文件转换为文本。支持自动通过 ffmpeg 进行格式转换。
 
     Args:
-        audio_file_path: 音频文件的路径。
+        audio_file_path: 音频文件的路径（支持 silk, amr, mp3 等）。
 
     Returns:
         包含识别文本的字典，如果失败则返回错误信息。
     """
-    r = sr.Recognizer()
+    import subprocess
+    import speech_recognition as sr
+    import os
+    
+    # 微信语音可能没有后缀或后缀不匹配，尝试统一转为 wav
+    wav_path = audio_file_path + ".temp.wav"
+    
     try:
-        with sr.AudioFile(audio_file_path) as source:
+        # 使用 ffmpeg 强制转换
+        logger.info(f"正在转换音频格式: {audio_file_path} -> {wav_path}")
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", audio_file_path, "-ar", "16000", "-ac", "1", wav_path],
+            capture_output=True, check=True
+        )
+        
+        r = sr.Recognizer()
+        with sr.AudioFile(wav_path) as source:
             audio = r.record(source)
+        
+        # 优先使用 google (国内需要代理，代理已在 agent 中配置，此处受全局环境变量影响)
         text = r.recognize_google(audio, language="zh-CN")
+        
+        # 清理临时文件
+        if os.path.exists(wav_path):
+            os.remove(wav_path)
+            
         return {"status": "success", "recognized_text": text}
+        
+    except subprocess.CalledProcessError as e:
+        return {"status": "error", "message": f"FFmpeg 转换失败: {e.stderr.decode()}"}
     except sr.UnknownValueError:
-        return {"status": "error", "message": "无法识别音频中的语音"}
-    except sr.RequestError as e:
-        return {"status": "error", "message": f"无法从 Google Speech Recognition 服务请求结果; {e}"}
-    except FileNotFoundError:
-        return {"status": "error", "message": f"文件未找到: {audio_file_path}"}
+        return {"status": "error", "message": "无法识别音频中的语音 (可能由于底噪过大或非标准语言)"}
     except Exception as e:
-        return {"status": "error", "message": f"发生未知错误: {e}"}
+        if os.path.exists(wav_path):
+            os.remove(wav_path)
+        return {"status": "error", "message": f"处理音频时发生意外错误: {e}"}

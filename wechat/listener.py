@@ -185,6 +185,11 @@ class WechatListener:
                         if msg_type in ("time", "sys", "recall"):
                             continue
 
+                        # --- [v10.2] 语音捕获增强 ---
+                        if msg_type == 'voice' or msg_type == 34:
+                            msg_content = "[语音]"
+                            logger.info(f"🎤 捕获到语音消息来自 [{who}]")
+
                         # 管理指令拦截 (# 开头且由 Root 发出)
                         if auth_info.role_level == RoleLevel.ROOT and msg_content.startswith("#"):
                             if handle_admin_command(msg_content, who):
