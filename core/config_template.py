@@ -38,6 +38,12 @@ class ConfigTemplate:
     max_message_length = 500
     listen_interval = 1.0
     
+    # 语音功能增强 (TTS)
+    tts_enabled = False
+    tts_provider = "edge"
+    tts_voice = "zh-CN-XiaoxiaoNeural"
+    tts_local_play = True
+    
     # 摘要与记忆
     summary_time = "22:00"
     summary_receiver = "文件传输助手"

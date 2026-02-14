@@ -141,6 +141,16 @@ class MessageProcessor:
                             daily_logger.info(f"[{message.sender}] {reply}")
                             # [Fix v10.2.5] 稳定性加固：发送后强制冷却，降低由于频繁 COM 会话切换导致的 UI 锁冲突风险
                             time.sleep(1.0)
+                            
+                            # --- [v10.3] 语音播报增强 (TTS) ---
+                            if getattr(conf, 'tts_enabled', False):
+                                try:
+                                    from tools.speech_tool import async_tts_and_play
+                                    # 异步触发（虽然在 asyncio.run 环境下，这里也是安全的）
+                                    asyncio.run(async_tts_and_play(reply))
+                                    logger.info(f"🔊 语音播报任务已触发")
+                                except Exception as tts_e:
+                                    logger.warning(f"语音播报触发失败: {tts_e}")
                         except Exception as e:
                             logger.error(f"发送回复失败 [{message.sender}]: {e}")
 
