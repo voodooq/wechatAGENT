@@ -158,6 +158,35 @@ class WechatSender:
             logger.warning(f"[sendImage] 发送异常，已清理微信对象以备重试: {e}")
             raise e
 
+    @retryOnFailure(maxRetries=3, delay=2.0)
+    def sendFile(self, receiver: str, file_path: str) -> None:
+        """
+        向指定联系人发送文件
+        """
+        self._ensureWechat()
+        
+        try:
+            with ui_lock:
+                keepAliveWechatWindow(force_focus=True)
+                self._activateChat(receiver)
+                wx = self._local.wx
+                
+                # 随机延迟
+                delay = random.uniform(conf.reply_delay_min, conf.reply_delay_max)
+                time.sleep(delay)
+
+                # 发送文件
+                wx.SendFiles(filepath=file_path, who=receiver)
+                logger.info(f"已发送文件 [{file_path}] 给 [{receiver}]")
+                
+                time.sleep(1.0) # 核心锁定
+                time.sleep(0.2)
+        except Exception as e:
+            if hasattr(self._local, 'wx'):
+                del self._local.wx
+            logger.warning(f"[sendFile] 发送异常，已清理微信对象以备重试: {e}")
+            raise e
+
     def _splitMessage(self, content: str) -> list[str]:
         """
         将长消息按段落智能分割

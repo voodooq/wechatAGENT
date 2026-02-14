@@ -146,11 +146,16 @@ class MessageProcessor:
                             if getattr(conf, 'tts_enabled', False):
                                 try:
                                     from tools.speech_tool import async_tts_and_play
-                                    # 异步触发（虽然在 asyncio.run 环境下，这里也是安全的）
-                                    asyncio.run(async_tts_and_play(reply))
-                                    logger.info(f"🔊 语音播报任务已触发")
+                                    # 异步触发并获取路径
+                                    audio_path = asyncio.run(async_tts_and_play(reply))
+                                    logger.info(f"🔊 语音播报任务已完成")
+                                    
+                                    # 如果开启了微信端发送
+                                    if audio_path and getattr(conf, 'tts_send_to_chat', False):
+                                        sender.sendFile(message.sender, audio_path)
+                                        logger.info(f"📤 语音文件已下发给 [{message.sender}]")
                                 except Exception as tts_e:
-                                    logger.warning(f"语音播报触发失败: {tts_e}")
+                                    logger.warning(f"语音播报或下发失败: {tts_e}")
                         except Exception as e:
                             logger.error(f"发送回复失败 [{message.sender}]: {e}")
 

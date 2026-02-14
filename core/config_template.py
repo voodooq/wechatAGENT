@@ -43,6 +43,7 @@ class ConfigTemplate:
     tts_provider = "edge"
     tts_voice = "zh-CN-XiaoxiaoNeural"
     tts_local_play = True
+    tts_send_to_chat = False
     
     # 摘要与记忆
     summary_time = "22:00"

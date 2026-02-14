@@ -72,3 +72,5 @@ async def async_tts_and_play(text: str):
     # 本地播放
     if audio_path and getattr(conf, 'tts_local_play', True):
         play_audio(audio_path)
+        
+    return audio_path
