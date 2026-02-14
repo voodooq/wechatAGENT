@@ -4,7 +4,7 @@ IronSentinel - 数据文件处理工具
 import os
 # import pandas as pd # 移至函数内部实现惰性加载
 from langchain_core.tools import tool
-from core.config import conf
+from core.config import conf, PROJECT_ROOT
 from utils.logger import logger
 
 @tool

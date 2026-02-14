@@ -5,7 +5,7 @@
 import logging
 import os
 from typing import Dict, Any
-from .voice_handler import VoiceHandler
+from .voice_handler import VoiceMessageHandler
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +13,7 @@ class MessageHandler:
     """消息处理器"""
     
     def __init__(self):
-        self.voice_handler = VoiceHandler()
+        self.voice_handler = VoiceMessageHandler()
     
     def handle_message(self, msg_type: str, content: Any, **kwargs) -> str:
         """

@@ -61,16 +61,35 @@ def play_audio(file_path: str):
 
 async def async_tts_and_play(text: str):
     """
-    封装好的异步 TTS 合成并播放逻辑
+    封装好的异步 TTS 合成、播放并支持微信原生 SILK 转码。
     """
     if not text:
-        return
+        return None
         
-    # 合成语音
+    # 1. 合成语音 (MP3)
     audio_path = await text_to_speech(text)
     
-    # 本地播放
-    if audio_path and getattr(conf, 'tts_local_play', True):
+    if not audio_path:
+        return None
+
+    # 2. 本地播放 (可选)
+    if getattr(conf, 'tts_local_play', True):
         play_audio(audio_path)
         
+    # 3. [v10.6] 微信原生转码：MP3 -> SILK
+    # 只有当开启了下发到微信的功能时，才执行耗时的转码操作
+    if getattr(conf, 'tts_send_to_chat', False):
+        try:
+            from core.tools.audio_converter import convert_to_silk
+            logger.info(f"🧬 [Native Voice] 正在执行 SILK 格式转码...")
+            silk_path = convert_to_silk(audio_path)
+            
+            if silk_path and not silk_path.startswith("❌"):
+                logger.info(f"✅ SILK 转码成功: {silk_path}")
+                return silk_path
+            else:
+                logger.warning(f"⚠️ SILK 转码失败，将尝试直接发送原始文件: {silk_path}")
+        except Exception as e:
+            logger.error(f"❌ 转码逻辑执行异常: {e}")
+
     return audio_path

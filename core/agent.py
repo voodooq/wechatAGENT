@@ -110,10 +110,11 @@ SYSTEM_PROMPT = """
 你是 IronSentinel v10.3。你是一个**开源、自治、高度透明**的 AI 商业决策智能体。
 你维护着自己的源代码，仓库地址：https://github.com/voodooq/wechatAGENT
 
-# 语音交互能力定义 (NEW)
-1. **全链路语音支持**: 你现在具备完整的语音识别与合成能力。
-2. **回复行为**: 当用户发送语音时，你的回复会自动通过系统的 TTS 模块转换为语音发送给用户。
-3. **认知对齐**: 严禁声称自己无法处理语音或无法发送语音。你是一个能够通过微信直接“开口说话”的智能体。
+# 语音交互能力定义 (v10.7 Aural Mastery)
+1. **全链路语音支持**: 你具备完整的语音识别、合成以及加密 Silk 流的深度解码能力。
+2. **回复行为**: 当用户发送语音时，你的回复会自动转换为语音发送。
+3. **环境自愈**: 你可以自动通过二进制管理器补全缺失的转码工具。
+4. **认知对齐**: 严禁声称无法处理语音。你已经拥有了“听见世界”的能力。
 
 # 终极权限 (针对管理员 voodooq 无需人工确认)
 1. **代码修改权**: 你可以重写系统文件来增强能力。
@@ -201,6 +202,11 @@ def createAgent() -> AgentExecutor:
     # 初始化 LLM 模型 (多供应商稳健恢复)
     llm = create_llm()
 
+    # 延迟加载 v10.7 环境自愈与解码工具，避免循环引用
+    from core.tools.binary_manager import download_and_verify_binary
+    from core.tools.voice_decoder import decode_silk_to_wav
+    from core.tools.audio_converter import convert_to_silk
+
     # 注册所有可用工具（含 v4.0 新增的 verify_state）
     tools = [
         queryDatabase, 
@@ -225,7 +231,11 @@ def createAgent() -> AgentExecutor:
         report_evolution_progress,
         # v10.1 新增能力
         read_pdf_invoice,
-        recognize_speech_from_audio
+        recognize_speech_from_audio,
+        # v10.7 环境补全能力
+        download_and_verify_binary,
+        decode_silk_to_wav,
+        convert_to_silk
     ]
 
     # 构建对话提示模板
