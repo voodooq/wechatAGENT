@@ -3,7 +3,13 @@ class ConfigTemplate:
     公开配置模板 (不含敏感信息)
     """
     # API 密钥
-    google_api_key = "YOUR_KEY_HERE"
+    llm_provider = "google" # google, openai, anthropic, deepseek, openai-compatible
+    google_api_key = ""
+    openai_api_key = ""
+    openai_api_base = "https://api.openai.com/v1"
+    anthropic_api_key = ""
+    deepseek_api_key = ""
+    deepseek_api_base = "https://api.deepseek.com"
     tavily_api_key = ""
     
     # 代理
@@ -11,7 +17,7 @@ class ConfigTemplate:
     http_proxy = ""
     
     # 模型
-    model_name = "gemini-2.5-flash"
+    model_name = "gemini-2.0-flash"
     temperature = 0.2
     max_output_tokens = 2048
     genai_rpm = 15

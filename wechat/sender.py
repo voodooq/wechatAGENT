@@ -115,8 +115,8 @@ class WechatSender:
                     logger.info(f"已发送消息给 [{receiver}]，长度: {len(content)}")
                     time.sleep(1.0)
                 
-                # 额外给 UI 0.2 秒缓冲
-                time.sleep(0.2)
+                # [Fix v10.2.7] 增强缓和 COM 冲突：在 lock 内多留一点“冷却”时间，确保 UI 事件循环清空
+                time.sleep(1.0)
         except Exception as e:
             # 遇到 COM 错误或发送失败，强制清理当前线程的微信对象
             # 下次重试时会重新初始化

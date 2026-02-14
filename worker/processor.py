@@ -61,6 +61,11 @@ class MessageProcessor:
                             temp_dir = os.path.join(conf.project_root, "temp", "voice")
                             os.makedirs(temp_dir, exist_ok=True)
                             
+                            # [Fix v10.2.5] 增加对象鲁棒性检查，防止自发消息导致的属性缺失错误
+                            if not hasattr(message.raw, 'SaveVoice'):
+                                logger.warning(f"消息对象 {type(message.raw)} 不支持语音保存，跳过转录流程")
+                                raise Exception("该消息类型不支持语音提取")
+                                
                             # 保存语音文件 (wxauto 的 msg 对象 SaveVoice 方法)
                             save_path = message.raw.SaveVoice(savepath=temp_dir)
                             if not save_path or not os.path.exists(save_path):
@@ -106,7 +111,9 @@ class MessageProcessor:
                             sender=message.sender,
                             role_level=message.role_level
                         ))
-                        logger.info(f"AI 回复获取成功 [{message.sender}]，长度: {len(reply) if reply else 0}")
+                        # [Fix v10.2.7] 动态模型名称日志
+                        provider_name = getattr(conf, 'llm_provider', 'AI').capitalize()
+                        logger.info(f"{provider_name} 回复获取成功 [{message.sender}]，长度: {len(reply) if reply else 0}")
                     except Exception as e:
                         logger.error(f"AI 处理异常 [{message.sender}]: {e}")
                         reply = f"抱歉，处理消息时发生错误: {str(e)[:80]}，请稍后重试。 (AI)"
@@ -132,6 +139,8 @@ class MessageProcessor:
                             logger.info(f"✅ 回复已发送给 [{message.sender}]")
                             # 记录到每日消息日志
                             daily_logger.info(f"[{message.sender}] {reply}")
+                            # [Fix v10.2.5] 稳定性加固：发送后强制冷却，降低由于频繁 COM 会话切换导致的 UI 锁冲突风险
+                            time.sleep(1.0)
                         except Exception as e:
                             logger.error(f"发送回复失败 [{message.sender}]: {e}")
 

@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from typing import Optional
+from dotenv import load_dotenv
 
 class Config:
     """
@@ -19,6 +20,9 @@ class Config:
         return cls._instance
 
     def _load(self):
+        # [Fix v10.3.0] 强制开启 .env 覆盖模式，确保用户在 .env 中的修改能覆盖残留的环境变量
+        load_dotenv(dotenv_path=self.PROJECT_ROOT / ".env", override=True)
+        
         # 1. 加载公开模板
         try:
             from core.config_template import ConfigTemplate
@@ -47,8 +51,9 @@ class Config:
                     setattr(self, key, int(env_val))
                 elif isinstance(orig_val, float):
                     setattr(self, key, float(env_val))
-                elif isinstance(orig_val, list) and "," in env_val:
-                    setattr(self, key, [i.strip() for i in env_val.split(",")])
+                elif isinstance(orig_val, list):
+                    # 如果原值是列表，则无论有无逗号都按逗号切分
+                    setattr(self, key, [i.strip() for i in env_val.split(",") if i.strip()])
                 else:
                     setattr(self, key, env_val)
 

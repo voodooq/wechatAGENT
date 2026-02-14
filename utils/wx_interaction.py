@@ -43,8 +43,9 @@ def activate_chat_window(who: str) -> bool:
         # 2. 清除并输入名称
         wx_window.SendKeys('{Ctrl}a{Back}', waitTime=0.2)
         
-        # [优化] 输入名称后稍微多等一下，让搜索结果列表出来
-        wx_window.SendKeys(who, waitTime=0.8)
+        # [Fix v10.2.6] 使用剪贴板复制粘贴代替模拟按键，彻底解决中文输入法 (IME) 干扰
+        auto.SetClipboardText(who)
+        wx_window.SendKeys('{Ctrl}v', waitTime=0.8)
         
         # 3. 回车确认 (激活搜索结果第一项)
         wx_window.SendKeys('{Enter}', waitTime=1.0)

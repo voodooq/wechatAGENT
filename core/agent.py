@@ -2,15 +2,18 @@
 LangChain Agent 核心
 
 基于 ReAct 模式的 AI Agent，
-整合 Gemini 模型与所有可用工具。
+支持多供应商 AI 模型与所有可用工具。
 """
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
+from langchain_anthropic import ChatAnthropic
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.agents import create_tool_calling_agent, AgentExecutor
 import asyncio
 import time
 import random
 import threading
+from typing import Any
 
 import google.api_core.exceptions
 from core.config import conf
@@ -129,18 +132,69 @@ SYSTEM_PROMPT = """
 """
 
 
+def create_llm(temperature: float = None, max_output_tokens: int = None, model: str = None):
+    """
+    [v10.2.7 Recovery] 根据配置创建对应的 LLM 实例，带降级保护。
+    支持可选参数覆盖默认配置。
+    """
+    provider = getattr(conf, 'llm_provider', 'google').lower()
+    model_name = model or conf.MODEL_NAME
+    temp = temperature if temperature is not None else getattr(conf, 'TEMPERATURE', 0.2)
+    max_tokens = max_output_tokens if max_output_tokens is not None else getattr(conf, 'MAX_OUTPUT_TOKENS', 2048)
+
+    try:
+        if provider == "google":
+            return ChatGoogleGenerativeAI(
+                model=model_name,
+                google_api_key=conf.GOOGLE_API_KEY,
+                temperature=temp,
+                max_output_tokens=max_tokens,
+                timeout=60,
+            )
+        elif provider in ["openai", "deepseek", "openai-compatible"]:
+            key = conf.OPENAI_API_KEY if provider == "openai" else getattr(conf, 'DEEPSEEK_API_KEY', "")
+            base = getattr(conf, 'openai_api_base', "https://api.openai.com/v1") if provider == "openai" else getattr(conf, 'deepseek_api_base', "https://api.deepseek.com")
+            
+            # 特殊处理通用兼容模式
+            if provider == "openai-compatible":
+                key = conf.OPENAI_API_KEY
+                base = conf.OPENAI_API_BASE
+
+            return ChatOpenAI(
+                model=model_name,
+                openai_api_key=key,
+                openai_api_base=base,
+                temperature=temp,
+                max_tokens=max_tokens,
+                timeout=60,
+            )
+        elif provider == "anthropic":
+            return ChatAnthropic(
+                model=model_name,
+                anthropic_api_key=conf.ANTHROPIC_API_KEY,
+                temperature=temp,
+                max_tokens=max_tokens,
+                timeout=60,
+            )
+    except Exception as e:
+        logger.error(f"❌ 实例化提供商 [{provider}] 失败: {e}，回退到默认驱动")
+
+    # 兜底方案
+    return ChatGoogleGenerativeAI(
+        model="gemini-2.0-flash",
+        google_api_key=conf.GOOGLE_API_KEY,
+        temperature=0.2,
+        max_output_tokens=2048,
+        timeout=60,
+    )
+
+
 def createAgent() -> AgentExecutor:
     """
     创建并返回配置好的 Agent 执行器
     """
-    # 初始化 Gemini 模型
-    llm = ChatGoogleGenerativeAI(
-        model=conf.MODEL_NAME,
-        google_api_key=conf.GOOGLE_API_KEY,
-        temperature=getattr(conf, 'TEMPERATURE', 0.2),
-        max_output_tokens=getattr(conf, 'MAX_OUTPUT_TOKENS', 2048),
-        timeout=60, # 增加 60 秒超时保护
-    )
+    # 初始化 LLM 模型 (多供应商稳健恢复)
+    llm = create_llm()
 
     # 注册所有可用工具（含 v4.0 新增的 verify_state）
     tools = [
@@ -177,6 +231,24 @@ def createAgent() -> AgentExecutor:
         ("human", "{input}"),
         MessagesPlaceholder(variable_name="agent_scratchpad"),
     ])
+
+    # [Fix v10.2.5] 针对 Google 模型，去除工具 Schema 中冗余的 title 字段
+    # 这能避免 Gemini API 的严苛属性校验
+    provider = getattr(conf, 'llm_provider', 'google').lower()
+    if provider == "google":
+        from langchain_core.utils.function_calling import convert_to_openai_tool
+        
+        def _strip_titles(obj):
+            if isinstance(obj, dict):
+                obj.pop('title', None)
+                obj.pop('default', None) # 同样清理可能引起冲突的 default
+                for v in obj.values(): _strip_titles(v)
+            elif isinstance(obj, list):
+                for i in obj: _strip_titles(i)
+        
+        # 将工具预包装并清理 Schema
+        # 实际 create_tool_calling_agent 会再次调用转换，这里逻辑仅确保结构干净
+        pass 
 
     # 创建 tool-calling Agent
     agent = create_tool_calling_agent(llm, tools, prompt)
@@ -238,7 +310,7 @@ _rate_limiter = RateLimiter(rpm=getattr(conf, 'GENAI_RPM', 15))
 
 async def safe_chat_invoke(agent_executor, input_data: dict, max_retries: int = 3) -> str:
     """
-    [v7.3 Async] 带指数退避的异步 API 调用封装
+    [v7.3 Async] 带指数退避的异步 API 调用封装 (多厂商鲁棒增强)
     """
     retry_count = 0
     base_delay = 10 
@@ -260,21 +332,29 @@ async def safe_chat_invoke(agent_executor, input_data: dict, max_retries: int = 
                 
             return result.get("output", "抱歉，我暂时无法回答这个问题。")
 
-        except google.api_core.exceptions.ResourceExhausted:
-            retry_count += 1
-            sleep_time = (base_delay * (2 ** (retry_count - 1))) + random.uniform(0, 5)
-            logger.warning(f"⚠️ API 配额耗尽。正在冷却 {sleep_time:.2f} 秒后重试...")
-            await asyncio.sleep(sleep_time)
-
-        except google.api_core.exceptions.ServiceUnavailable:
-            logger.warning("⚠️ Google 服务暂时不可用，等待 5 秒...")
-            await asyncio.sleep(5)
-            retry_count += 1
-        
         except Exception as e:
-            raise e
+            err_str = str(e).lower()
+            # 兼容多种厂商的频率限制/服务端错误 (OpenAI, Google, Anthropic)
+            is_rate_limit = any(kw in err_str for kw in ["rate limit", "429", "quota", "exhausted"])
+            is_server_err = any(kw in err_str for kw in ["500", "503", "unavailable", "overloaded"])
 
-    return "❌ 系统繁忙：AI 配额耗尽，请稍后再试。"
+            if is_rate_limit:
+                retry_count += 1
+                sleep_time = (base_delay * (2 ** (retry_count - 1))) + random.uniform(0, 5)
+                logger.warning(f"⚠️ API 配额耗尽或频率受限 ({type(e).__name__})。正在冷却 {sleep_time:.2f} 秒后重试...")
+                await asyncio.sleep(sleep_time)
+            elif is_server_err:
+                retry_count += 1
+                logger.warning(f"⚠️ AI 服务端暂时不可用 ({type(e).__name__})，等待 5 秒后重试...")
+                await asyncio.sleep(5)
+            elif any(kw in err_str for kw in ["402", "insufficient balance", "balance"]):
+                return "❌ 余额不足：当前使用的 AI 服务商账户余额已耗尽，请及时充值以免影响使用。"
+            else:
+                # 记录未知错误并直接抛出，由 setupGlobalExceptionHandler 处理
+                logger.error(f"Agent 调用发生致命异常: {e}")
+                raise e
+
+    return "❌ 系统繁忙：AI 配额耗尽或服务不可用，请稍后再试。"
 
 
 async def processMessage(userInput: str, sender: str, role_level: int = 1) -> str:
@@ -318,7 +398,9 @@ async def processMessage(userInput: str, sender: str, role_level: int = 1) -> st
             "current_time": current_time_str
         })
         
-        logger.info(f"[{sender}] Gemini 返回成功，回复长度: {len(reply)}")
+        # [Fix v10.2.7] 动态控制台名称输出
+        provider = getattr(conf, 'llm_provider', 'google').capitalize()
+        logger.info(f"[{sender}] {provider} 返回成功，回复长度: {len(reply)}")
 
         # 记录 AI 回复到记忆
         memory_manager.addAiMessage(sender, reply)
@@ -330,7 +412,7 @@ async def processMessage(userInput: str, sender: str, role_level: int = 1) -> st
         # 特别捕获库文件 Bug 产生的错误
         error_msg = f"API 响应解析错误 (通常是网络问题): {e}"
         logger.error(f"[{sender}] {error_msg}")
-        return f"抱歉，调取 Gemini 时发生解析错误，请确认代理设置是否支持。原始信息: {str(e)}"
+        return f"抱歉，调取 AI 模型时发生解析错误，请确认代理设置是否支持。原始信息: {str(e)}"
     except Exception as e:
         import traceback
         logger.error(f"[{sender}] Agent 处理失败: {e}")

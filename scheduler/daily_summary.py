@@ -10,9 +10,8 @@ from pathlib import Path
 from datetime import datetime
 
 import schedule
-from langchain_google_genai import ChatGoogleGenerativeAI
-
 from core.config import conf
+from core.agent import create_llm
 from wechat.sender import sender
 from utils.logger import logger
 
@@ -74,11 +73,8 @@ class DailySummaryScheduler:
         @returns 生成的摘要文本
         """
         try:
-            llm = ChatGoogleGenerativeAI(
-                model=conf.model_name,
-                google_api_key=conf.google_api_key,
-                temperature=0.3,  # 摘要任务用更低温度保证稳定
-            )
+            # [Fix v10.2.7] 使用模型工厂创建 LLM
+            llm = create_llm(temperature=0.3)
 
             prompt_text = SUMMARY_PROMPT.format(messages=messages)
             response = llm.invoke(prompt_text)
@@ -99,6 +95,8 @@ class DailySummaryScheduler:
 
         # 生成摘要
         today = datetime.now().strftime("%Y-%m-%d")
+        provider = getattr(conf, 'llm_provider', 'AI').capitalize()
+        logger.info(f"正在调用 {provider} 生成每日摘要...")
         summary = self._generateSummary(messages)
 
         # 添加日期标题
