@@ -51,18 +51,45 @@ class VoiceMessageHandler:
     
     def get_latest_voice_file(self) -> str:
         """
-        获取最新的语音文件路径
+        获取最新的语音文件路径 (v10.8 增强寻路方案)
         
         Returns:
             最新的语音文件路径，如果没有则返回空字符串
         """
-        voice_files = list(self.data_dir.glob("voice_*.silk"))
-        if not voice_files:
-            return ""
+        try:
+            # 1. 调用定位引擎锁定物理路径
+            from core.tools.wechat_locator import get_wechat_storage_path
+            target_base = get_wechat_storage_path.invoke({})
             
-        # 按修改时间排序，获取最新的文件
-        latest_file = max(voice_files, key=lambda f: f.stat().st_mtime)
-        return str(latest_file)
+            if "❌" in target_base:
+                logger.warning(f"深度寻路引擎未能返回有效路径: {target_base}")
+                # 降级：使用旧的 data_dir 搜索
+                voice_files = list(self.data_dir.glob("voice_*.silk"))
+                if not voice_files: return ""
+                return str(max(voice_files, key=lambda f: f.stat().st_mtime))
+
+            # 2. 执行定向精准探测 (dir /o-d /s /b)
+            # 这能发现由于微信版本差异可能隐藏在不同层级的 .silk 文件
+            logger.info(f"🧬 [v10.8] 正在精准探测微信语音流: {target_base}")
+            from core.tools.binary_manager import BIN_DIR # 借助已有 PATH
+            
+            # 使用 PowerShell 指令获取最新文件
+            import subprocess
+            cmd = f'powershell -NoProfile -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-ChildItem -Path \'{target_base}\' -Filter *.silk -Recurse | Sort-Object LastWriteTime -Descending | Select-Object -First 1 -ExpandProperty FullName"'
+            
+            try:
+                latest_path = subprocess.check_output(cmd, shell=True, encoding='utf-8').strip()
+                if latest_path and os.path.exists(latest_path):
+                    logger.info(f"✅ [Surgery] 成功捞取最新语音流: {latest_path}")
+                    return latest_path
+            except Exception as e:
+                logger.error(f"PowerShell 深度探测失败: {e}")
+
+            # 最后的残余搜寻逻辑
+            return ""
+        except Exception as e:
+            logger.error(f"寻路逻辑整体异常: {e}")
+            return ""
     
     def cleanup_old_files(self, max_age_hours: int = 24):
         """

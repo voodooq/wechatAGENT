@@ -49,13 +49,18 @@ def execute_system_command(command: str, user_name: str) -> str:
     # 为了简化演示，这里直接执行，但在实际生产中，Agent 应该有逻辑链。
     try:
         logger.info(f"主人指令执行: {command}")
+        # [Fix v10.8] 强制注入 chcp 65001 以解决 Windows GBK 编码引发的 UnicodeDecodeError
+        safe_command = f"chcp 65001 >nul && {command}"
+        
         # 增加超时时间到 30秒，适应较慢的命令
         # 合并 stdout 和 stderr 以便完整捕获错误
         result = subprocess.run(
-            command,
+            safe_command,
             shell=True,
             capture_output=True,
             text=True,
+            encoding='utf-8', # 对应 chcp 65001
+            errors='replace',
             timeout=30
         )
         

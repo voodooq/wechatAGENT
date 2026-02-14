@@ -206,6 +206,7 @@ def createAgent() -> AgentExecutor:
     from core.tools.binary_manager import download_and_verify_binary
     from core.tools.voice_decoder import decode_silk_to_wav
     from core.tools.audio_converter import convert_to_silk
+    from core.tools.wechat_locator import get_wechat_storage_path
 
     # 注册所有可用工具（含 v4.0 新增的 verify_state）
     tools = [
@@ -232,10 +233,11 @@ def createAgent() -> AgentExecutor:
         # v10.1 新增能力
         read_pdf_invoice,
         recognize_speech_from_audio,
-        # v10.7 环境补全能力
+        # v10.7-v10.8 环境与寻路工具
         download_and_verify_binary,
         decode_silk_to_wav,
-        convert_to_silk
+        convert_to_silk,
+        get_wechat_storage_path
     ]
 
     # 构建对话提示模板

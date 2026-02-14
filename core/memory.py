@@ -24,7 +24,9 @@ class MemoryManager:
         @param windowSize 每个会话保留的最大消息轮数（一问一答算2条）
         """
         self._histories: dict[str, InMemoryChatMessageHistory] = {}
-        self._window_size = (windowSize or conf.memory_window_size) * 2
+        # [Fix v10.8] 防御性配置解析，防止 NoneType * 2
+        base_size = windowSize or getattr(conf, 'memory_window_size', 10) or 10
+        self._window_size = int(base_size) * 2
 
     def getHistory(self, sessionId: str) -> InMemoryChatMessageHistory:
         """

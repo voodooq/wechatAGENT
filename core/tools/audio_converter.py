@@ -25,14 +25,18 @@ def convert_to_silk(input_path: str) -> str:
 
     try:
         # 1. 第一步：使用 ffmpeg 将音频转为 16bit, 24kHZ, 单声道的原始 PCM
-        # 这是转码为 SILK v3 的标准前置要求
-        subprocess.run([
+        # [Fix v10.8] 强制 UTF-8 环境以支持 Windows 中文路径
+        cmd_ffmpeg = [
             "ffmpeg", "-y", "-i", str(input_file),
             "-ar", "24000", "-ac", "1", "-f", "s16le", str(pcm_path)
-        ], check=True, capture_output=True)
+        ]
+        cmd_ffmpeg_str = ' '.join([f'"{s}"' for s in cmd_ffmpeg])
+        subprocess.run(
+            f"chcp 65001 >nul && {cmd_ffmpeg_str}", 
+            shell=True, check=True, capture_output=True
+        )
 
         # 2. 第二步：使用 silk_v3_encoder 进行编码
-        # 注意：此处假设环境中有 encoder 程序的路径
         encoder_path = conf.project_root / "kernel" / "bin" / "silk_v3_encoder.exe" 
         
         if not encoder_path.exists():
@@ -41,9 +45,13 @@ def convert_to_silk(input_path: str) -> str:
             if alt_path.exists():
                 encoder_path = alt_path
             else:
-                return "❌ [环境缺失] 找不到 silk_v3_encoder.exe。请先提供此工具。"
+                return "❌ [环境缺失] 找不到 silk_v3_encoder.exe。请检查路径或运行补全脚本。"
 
-        subprocess.run([str(encoder_path), str(pcm_path), str(output_silk)], check=True, capture_output=True)
+        cmd_encoder_str = ' '.join([f'"{s}"' for s in [str(encoder_path), str(pcm_path), str(output_silk)]])
+        subprocess.run(
+            f"chcp 65001 >nul && {cmd_encoder_str}", 
+            shell=True, check=True, capture_output=True
+        )
 
         # 3. 清理中转文件
         if pcm_path.exists():
