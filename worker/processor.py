@@ -48,12 +48,12 @@ class MessageProcessor:
                     
                     user_input = message.content
 
-                    # --- [v10.2] 语音消息预处理逻辑 ---
-                    if message.content == "[语音]":
+                    # --- [v10.2.2] 语音消息预处理逻辑 (增强模糊匹配) ---
+                    if message.content.startswith("[语音]"):
                         try:
-                            logger.info(f"🎤 正在接收并转录语音消息来自 [{message.sender}]...")
+                            logger.info(f"🎤 正在接收并转录语音消息 [{message.content}] 来自 [{message.sender}]...")
                             # 1. 发送中间状态反馈
-                            sender.sendMessage(message.sender, "🎤 正在聆听您的语音，请稍候...")
+                            sender.sendMessage(message.sender, f"🎤 正在聆听您的语音({message.content.replace('[语音]', '')})，请稍候...")
                             
                             # 2. 调用 wxauto 保存语音
                             import os

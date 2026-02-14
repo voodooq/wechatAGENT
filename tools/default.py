@@ -1,6 +1,8 @@
 from typing import Optional
+from langchain_core.tools import tool
 import speech_recognition as sr
 import os
+from utils.logger import logger
 
 def queryDatabase(query: str) -> dict:
     # ... (保持原有代码不变)
@@ -78,6 +80,7 @@ def read_pdf_invoice(file_path: str) -> dict:
     # ... (保持原有代码不变)
     pass
 
+@tool
 def recognize_speech_from_audio(audio_file_path: str) -> dict:
     """
     将音频文件转换为文本。支持自动通过 ffmpeg 进行格式转换。

@@ -62,9 +62,9 @@ def handle_admin_command(content: str, admin_name: str) -> bool:
             return True
 
         elif cmd == "#重启":
-            # 这是一个示例系统命令
-            sender.sendMessage(admin_name, "🔄 正在尝试重启助理服务...")
-            # NOTE: 实际重启逻辑通常通过外部守护进程实现，此处仅为示例
+            sender.sendMessage(admin_name, "🔄 正在尝试重启助理服务 (Mutation v10.2.1)...")
+            from tools.evolution import request_hot_reload
+            request_hot_reload(reason="管理员手动请求重启", report_to=admin_name)
             return True
 
     except Exception as e:

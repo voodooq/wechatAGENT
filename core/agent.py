@@ -250,6 +250,14 @@ async def safe_chat_invoke(agent_executor, input_data: dict, max_retries: int = 
 
             # 2. 核心改变：使用 ainvoke 启动异步链，支持异步工具调用
             result = await agent_executor.ainvoke(input_data)
+            
+            # [Fix v10.2.1] 健壮性检查：确保 result 是字典
+            if not isinstance(result, dict):
+                logger.error(f"Agent 返回值异常，期望 dict 但得到 {type(result)}: {result}")
+                if callable(result):
+                    return "❌ 系统内部错误：Agent 意外返回了一个函数对象，请检查工具注册。"
+                return str(result)
+                
             return result.get("output", "抱歉，我暂时无法回答这个问题。")
 
         except google.api_core.exceptions.ResourceExhausted:
