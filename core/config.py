@@ -54,9 +54,13 @@ class Config:
         self._post_init()
 
     def _post_init(self):
-        # 路径校准
+        # 路径校准 (PROJECT_ROOT 由 property 维护，无需重复设置)
         self.db_full_path = self.PROJECT_ROOT / getattr(self, 'db_path', 'data/work.db')
         self.log_full_dir = self.PROJECT_ROOT / 'logs'
+        
+        # [v10.9] 核心配置与媒体解密协议
+        self.memory_window_size = int(getattr(self, 'memory_window_size', 10) or 10)
+        self.xor_enabled = getattr(self, 'xor_enabled', True)
         
         # 微信文件路径自动探测
         self.wechat_files_root = self._detect_wechat_path()
