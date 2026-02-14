@@ -1,0 +1,38 @@
+# 1. 绝对隐私 (数据与配置)
+data/
+logs/
+temp/
+core/config_private.py
+.env
+.env*
+secrets.py
+*.db
+*.sqlite
+
+# 2. 运行时垃圾与诊断输出
+__pycache__/
+*.pyc
+*.log
+*.txt
+*.output
+models_list.txt
+models_output.txt
+
+# 3. 本地调试与临时脚本 (拦截一切 probe/test/check)
+probe_wx*.py
+check_models.py
+verify_model.py
+find_func*.py
+debug_import*.py
+test_*.py
+*test.py
+tests/
+!tests/stable_v10/  # 如果有需要保留的稳定版测试可以反向包含
+
+# 4. 系统与 IDE 文件
+.DS_Store
+.vscode/
+venv/
+.idea/
+*.bat
+!run_sentinel.bat # 核心运行脚本除外
