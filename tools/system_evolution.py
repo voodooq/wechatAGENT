@@ -60,19 +60,18 @@ def install_windows_software(software_name: str) -> str:
                 return f"❌ 安全策略拒绝：软件 '{software_name}' 被识别为娱乐或非办公软件，已过滤。"
 
         # 1. 先搜索软件，确保软件存在于 winget 源
-        search_cmd = f"winget search \"{software_name}\" --source winget --accept-source-agreements"
-        search_res = subprocess.run(search_cmd, capture_output=True, text=True, shell=True)
+        # [v11.0] 强制注入 chcp 65001 以解决 Windows 环境编码问题
+        search_cmd = f"chcp 65001 >nul && winget search \"{software_name}\" --source winget --accept-source-agreements"
+        search_res = subprocess.run(search_cmd, capture_output=True, text=True, shell=True, encoding='utf-8', errors='replace')
         
         if "No package found" in search_res.stdout:
             return f"❌ 未在微软商店 (winget) 找到软件或包: {software_name}。请确认名称是否准确。"
 
         # 2. 静默安装
-        # --silent: 静默安装，不弹窗
-        # --accept-package-agreements: 自动同意 EULA 协议
-        install_cmd = f"winget install --name \"{software_name}\" --silent --accept-source-agreements --accept-package-agreements --source winget"
+        install_cmd = f"chcp 65001 >nul && winget install --name \"{software_name}\" --silent --accept-source-agreements --accept-package-agreements --source winget"
         
         logger.info(f"执行安装指令: {install_cmd}")
-        process = subprocess.run(install_cmd, shell=True, capture_output=True, text=True)
+        process = subprocess.run(install_cmd, shell=True, capture_output=True, text=True, encoding='utf-8', errors='replace')
         
         if process.returncode == 0:
             return f"✅ 软件 '{software_name}' 已静默安装完成！您现在可以尝试启动它了。"

@@ -54,44 +54,69 @@ class Config:
         self._post_init()
 
     def _post_init(self):
-        # 路径校准 (PROJECT_ROOT 由 property 维护)
+        # 路径校准
         self.db_full_path = self.PROJECT_ROOT / getattr(self, 'db_path', 'data/work.db')
         self.log_full_dir = self.PROJECT_ROOT / 'logs'
         
-        # [v10.9] 核心进化配置
+        # [v11.0] 环境自愈配置：设置硬性默认值，防止 NoneType 导致崩溃
         self.memory_window_size = int(getattr(self, 'memory_window_size', 10) or 10)
         self.xor_enabled = getattr(self, 'xor_enabled', True)
+        self.agent_max_iterations = int(getattr(self, 'agent_max_iterations', 15) or 15)
         
-        # 微信文件路径自动探测
-        self.wechat_files_root = self._detect_wechat_path()
+        # 微信文件路径自动探测 (优先使用物理路径雷达)
+        try:
+            self.wechat_files_root = self._detect_wechat_path()
+        except Exception as e:
+            logger.error(f"微信路径探测发生异常: {e}")
+            self.wechat_files_root = os.path.join(os.environ.get("USERPROFILE", ""), "Documents", "WeChat Files")
         
-        # 代理自动校准 (适配 gRPC)
+        # 代理自动校准
         self._setup_proxies()
 
     def _detect_wechat_path(self) -> str:
-        """自动从注册表探测微信存储路径"""
+        """[Omni-Path] 自动解析注册表与占位符，锁定微信存储物理路径"""
+        # 1. 优先使用环境变量手动配置
         env_root = os.getenv("WECHAT_FILES_ROOT")
         if env_root and os.path.exists(env_root):
             return env_root
 
+        # 2. 从注册表探测
         try:
             key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Tencent\WeChat", 0, winreg.KEY_READ)
             path_val, _ = winreg.QueryValueEx(key, "FileSavePath")
             winreg.CloseKey(key)
-            if path_val:
-                if path_val == "MyDocuments:":
-                    res = os.path.join(os.path.expanduser("~"), "Documents", "WeChat Files")
-                else:
-                    res = os.path.join(path_val, "WeChat Files")
-                if os.path.exists(res): return res
+            
+            # 处理 MyDocuments: 占位符
+            if "MyDocuments:" in path_val:
+                user_profile = os.environ.get("USERPROFILE")
+                doc_path = os.path.join(user_profile, "Documents") if user_profile else os.path.expanduser("~/Documents")
+                
+                # 双重校验：尝试通过 PowerShell 获取标准文档路径
+                try:
+                    import subprocess
+                    shell_cmd = 'powershell -NoProfile -ExecutionPolicy Bypass -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; [Environment]::GetFolderPath(\'MyDocuments\')"'
+                    ps_doc_path = subprocess.check_output(shell_cmd, shell=True, encoding='utf-8').strip()
+                    if ps_doc_path and os.path.exists(ps_doc_path):
+                        doc_path = ps_doc_path
+                except: pass
+                
+                res = path_val.replace("MyDocuments:", doc_path)
+            else:
+                res = path_val
+                
+            if "WeChat Files" not in res:
+                res = os.path.join(res, "WeChat Files")
+                
+            if os.path.exists(res): return res
         except: pass
 
-        # 启发式搜寻 (D/E/F/C)
-        for drive in ["D:", "E:", "F:", "C:"]:
+        # 3. 启发式扫描 (跨盘符)
+        for drive in ["D:", "E:", "F:", "G:", "C:"]:
             p = f"{drive}\\WeChat Files"
             if os.path.exists(p): return p
             
-        return os.path.join(os.path.expanduser("~"), "Documents", "WeChat Files")
+        # 兜底：当前用户文档目录
+        return os.path.join(os.environ.get("USERPROFILE", ""), "Documents", "WeChat Files")
 
     def _setup_proxies(self):
         """处理 HTTPS_PROXY/HTTP_PROXY 转换并注入环境"""

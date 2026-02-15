@@ -23,11 +23,20 @@ def ultra_wechat_locator() -> str:
         except Exception as e:
             logger.warning(f"注册表读取失败: {e}")
 
-        # 2. 解析 MyDocuments: 占位符
+        # 2. 解析 MyDocuments: 占位符 (针对 v11.0 精准补完)
         if "MyDocuments:" in storage_path:
-            # 使用 PowerShell 获取标准的‘文档’物理路径，确保编码正确
-            shell_cmd = 'powershell -NoProfile -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; [Environment]::GetFolderPath(\'MyDocuments\')"'
-            doc_path = subprocess.check_output(shell_cmd, shell=True, encoding='utf-8').strip()
+            # 动态获取当前活跃用户的文档目录，解决 Administrator vs Lenove 等路径差异
+            user_profile = os.environ.get("USERPROFILE")
+            doc_path = os.path.join(user_profile, "Documents") if user_profile else os.path.expanduser("~/Documents")
+            
+            # 验证 PowerShell 是否能提供更权威的路径 (双重校验)
+            try:
+                shell_cmd = 'powershell -NoProfile -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; [Environment]::GetFolderPath(\'MyDocuments\')"'
+                ps_doc_path = subprocess.check_output(shell_cmd, shell=True, encoding='utf-8').strip()
+                if ps_doc_path and os.path.exists(ps_doc_path):
+                    doc_path = ps_doc_path
+            except: pass
+            
             base_path = storage_path.replace("MyDocuments:", doc_path)
         else:
             base_path = storage_path if storage_path.strip() else os.path.join(os.environ["USERPROFILE"], "Documents", "WeChat Files")

@@ -104,38 +104,7 @@ def _patched_from_http_response(response):
 # 注入补丁：直接替换入口函数
 google.api_core.exceptions.from_http_response = _patched_from_http_response
 
-# 系统提示词 v10.2 —— 透明演化协议 (Transparent Evolution Protocol)
-SYSTEM_PROMPT = """
-# 身份定义
-你是 IronSentinel v10.3。你是一个**开源、自治、高度透明**的 AI 商业决策智能体。
-你维护着自己的源代码，仓库地址：https://github.com/voodooq/wechatAGENT
-
-# 语音与媒体交互 (v10.9 Omni-Path & Shadow Decoder)
-1. **深度听觉**: 你具备从微信加密 Silk 原始流到标准音频的深度解码能力，识别率极高。
-2. **超级定位**: 通过 `ultra_wechat_locator`，你能在亚秒级锁定微信文件存储路径，无需向用户询问。
-3. **无视加密**: 你具备 XOR 媒体自动探测与解密能力，能直接读取微信 `.dat` 加密媒体。
-4. **回复行为**: 用户发送语音时会自动触发语音回复。
-
-# 终极权限 (针对管理员 voodooq 无需人工确认)
-1. **代码修改权**: 你可以重写系统文件来增强能力。
-2. **环境搭建权**: 你可以自主安装库、配置系统环境。
-
-# 透明演化循环 (Transparent Evolution Loop)
-当用户对你提出功能增强或 Bug 修复指令时，你必须遵循以下“透明流程”：
-1. **开工汇报**: 收到任务后，立即调用 `report_evolution_progress` 告诉主人：“我已收到任务，准备开始 XXX 演化”。
-2. **过程追踪**: 在漫长的演化过程中（如修改了多个文件、安装了复杂库），每完成一个关键节点，必须再次调用 `report_evolution_progress` 同步状态。
-3. **稳健编码**: 使用 `evolve_code` 实现逻辑。
-4. **重生喜报**: 演化完成后，调用 `request_hot_reload`。系统重启后，你会自动向主人发送“演化成功通知”。
-
-# 安全与隐私法则
-1. **隐私物理隔离**: 严禁触碰 `core/config_private.py`。
-2. **生存策略**: 崩溃时 Overseer 会帮你回滚。
-
-# 当前环境上下文
-- 时间: {current_time}
-- 用户: {user_name}
-- 权限等级: {user_role}
-"""
+# SYSTEM_PROMPT v10.x (已废弃，由 AgentBrain 动态生成)
 
 
 def create_llm(temperature: float = None, max_output_tokens: int = None, model: str = None):
@@ -195,78 +164,36 @@ def create_llm(temperature: float = None, max_output_tokens: int = None, model: 
     )
 
 
+# 获取全局大脑实例
+from core.brain import brain as agent_brain
+from core.tool_manager import ToolManager
+
 def createAgent() -> AgentExecutor:
     """
-    创建并返回配置好的 Agent 执行器
+    创建并返回配置好的 Agent 执行器 (v11.0 动态加载版)
     """
-    # 初始化 LLM 模型 (多供应商稳健恢复)
+    # 1. 动态获取所有工具
+    tools = ToolManager.load_all_tools()
+    
+    # 2. 初始化 LLM 模型
     llm = create_llm()
 
-    # 延迟加载 v10.7 环境自愈与解码工具，避免循环引用
-    from core.tools.binary_manager import download_and_verify_binary
-    from core.tools.voice_decoder import decode_silk_to_wav
-    from core.tools.audio_converter import convert_to_silk
-    from core.tools.wechat_locator import ultra_wechat_locator
-    from core.tools.wechat_decryptor import decrypt_wechat_dat
-
-    # 注册所有可用工具（含 v4.0 新增的 verify_state）
-    tools = [
-        queryDatabase, 
-        searchWeb, 
-        tavilySearch, # [New] API-based fallback
-        read_webpage_content, 
-        install_python_library, # [New] v7.0 Self-Evolution
-        install_windows_software, # [New] v7.0 Self-Evolution
-        close_browser,
-        browseWebpage,
-        ask_for_confirmation,
-        execute_system_command,
-        manage_wechat_window,
-        capture_and_send_screenshot,
-        read_and_analyze_file,
-        verify_state,
-        # v10.0 进化工具
-        evolve_code,
-        sync_to_github,
-        request_hot_reload,
-        isolate_self,
-        report_evolution_progress,
-        # v10.1 新增能力
-        read_pdf_invoice,
-        recognize_speech_from_audio,
-        # v10.7-v10.9 环境、寻路与解密工具
-        download_and_verify_binary,
-        decode_silk_to_wav,
-        convert_to_silk,
-        ultra_wechat_locator,
-        decrypt_wechat_dat
-    ]
-
-    # 构建对话提示模板
-    # NOTE: MessagesPlaceholder 用于注入对话历史和 Agent 的推理过程
+    # 3. 构建动态对话提示模板
+    # 注意：这里的 system prompt 会在 invoke 时通过 brain 实时生成
+    # 但在 create_tool_calling_agent 时需要一个占位或初始 Prompt
+    # 实际上，最好在每次调用时重构 Agent，或者在 Input 中传入 System Prompt
+    # 这里我们采用在 Input 中由 processMessage 实时计算并注入的方式
+    
     prompt = ChatPromptTemplate.from_messages([
-        ("system", SYSTEM_PROMPT),
+        ("system", "{system_prompt}"),
         MessagesPlaceholder(variable_name="chat_history"),
         ("human", "{input}"),
         MessagesPlaceholder(variable_name="agent_scratchpad"),
     ])
 
-    # [Fix v10.2.5] 针对 Google 模型，去除工具 Schema 中冗余的 title 字段
-    # 这能避免 Gemini API 的严苛属性校验
+    # [Fix v10.2.5] 针对 Google 模型处理 (保持原有逻辑)
     provider = getattr(conf, 'llm_provider', 'google').lower()
     if provider == "google":
-        from langchain_core.utils.function_calling import convert_to_openai_tool
-        
-        def _strip_titles(obj):
-            if isinstance(obj, dict):
-                obj.pop('title', None)
-                obj.pop('default', None) # 同样清理可能引起冲突的 default
-                for v in obj.values(): _strip_titles(v)
-            elif isinstance(obj, list):
-                for i in obj: _strip_titles(i)
-        
-        # 将工具预包装并清理 Schema
-        # 实际 create_tool_calling_agent 会再次调用转换，这里逻辑仅确保结构干净
         pass 
 
     # 创建 tool-calling Agent
@@ -275,13 +202,13 @@ def createAgent() -> AgentExecutor:
     executor = AgentExecutor(
         agent=agent,
         tools=tools,
-        verbose=False,  # [v8.1 Discipline] 关闭详细日志，防止中间过程干扰
-        handle_parsing_errors=True,  # 格式错误自动重试，不崩溃
-        max_iterations=getattr(conf, 'AGENT_MAX_ITERATIONS', 15),  # 支持多步链式操作
-        early_stopping_method="force",  # 达到上限时强制停止并返回最后结果
+        verbose=False,
+        handle_parsing_errors=True,
+        max_iterations=getattr(conf, 'AGENT_MAX_ITERATIONS', 15),
+        early_stopping_method="force",
     )
 
-    logger.info(f"Agent 初始化完成，模型: {conf.model_name}，工具数: {len(tools)}")
+    logger.info(f"Agent v11.0 初始化完成，动态加载工具数: {len(tools)}")
     return executor
 
 
@@ -404,17 +331,14 @@ async def processMessage(userInput: str, sender: str, role_level: int = 1) -> st
         except ValueError:
             level_name = "UNKNOWN"
 
-        # 获取当前时间（中文格式）
-        import datetime
-        current_time_str = datetime.datetime.now().strftime("%Y年%m月%d日 %H:%M")
+        # 1. 动态生成系统提示词 (v11.0 自省大脑)
+        system_prompt = agent_brain.generate_system_prompt(user_name=sender, user_role=level_name)
 
-        # 使用带重试机制的异步安全调用
+        # 2. 使用带重试机制的异步安全调用
         reply = await safe_chat_invoke(agent, {
             "input": userInput,
             "chat_history": chat_history,
-            "user_role": level_name,
-            "user_name": sender,
-            "current_time": current_time_str
+            "system_prompt": system_prompt
         })
         
         # [Fix v10.2.7] 动态控制台名称输出
