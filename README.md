@@ -61,28 +61,40 @@ wechatAGENT/
 
 ---
 
-## 🏗️ 快速启动 (Quick Start)
+## 🚀 快速开始
 
-### 1. 环境依赖
-确保安装了 [Conda](https://www.anaconda.com/) 或 Python 3.10+。
+### 方法一：使用启动脚本 (推荐)
+1. 双击运行 `start.bat`
+2. 脚本会自动：
+   - 检查并创建 Conda 环境
+   - 安装依赖包
+   - 创建 .env 配置文件
+   - 启动主程序
 
+### 方法二：手动安装
 ```bash
+# 1. 创建虚拟环境
 conda create -n wechat-ai python=3.10
 conda activate wechat-ai
+
+# 2. 安装依赖
 pip install -r requirements.txt
-```
 
-### 2. 配置 .env
-将 `.env.example` 复制为 `.env` 并填入你的 API Key (Google, OpenAI, etc.)。
+# 3. 配置环境变量
+copy .env.example .env
+# 编辑 .env 文件，填入你的 API Key
 
-### 3. 初始化二进制环境
-```bash
+# 4. 初始化环境
 python tools/initialize_env.py
+
+# 5. 启动程序
+python main.py
 ```
 
-### 4. 运行
+### 方法三：守护模式运行
 ```bash
-python main.py
+# 使用守护进程模式，增强稳定性
+run_sentinel.bat
 ```
 
 ---
@@ -93,6 +105,169 @@ IronSentinel 遵循**透明演化闭环**:
 1. **汇报**: 接收指令后，通过 `report_evolution_progress` 同步计划。
 2. **编码**: 自主生成演化补丁。
 3. **重启**: 请求 `request_hot_reload`，系统重生后自动向主人发送成功喜报。
+
+---
+
+## ⚙️ 详细配置指南
+
+### 必需配置 (.env)
+```env
+# AI 供应商选择
+LLM_PROVIDER=google  # 支持: google, openai, anthropic, deepseek
+MODEL_NAME=gemini-2.0-flash
+
+# API Keys (至少配置一个)
+GOOGLE_API_KEY=your_google_api_key_here
+OPENAI_API_KEY=your_openai_api_key_here
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
+DEEPSEEK_API_KEY=your_deepseek_api_key_here
+
+# 主人配置
+MASTER_WXID=your_master_wxid_here
+MASTER_REMARK=your_master_remark_here
+
+# 微信白名单
+WHITELIST=文件传输助手,张三,李四
+```
+
+### 可选配置
+- `TAVILY_API_KEY`: 网页搜索 API
+- `HTTPS_PROXY`/`HTTP_PROXY`: 代理设置
+- `DB_PATH`: 数据库路径
+- `LOG_LEVEL`: 日志级别
+
+---
+
+## 🛠️ 开发与扩展
+
+### 项目结构详解
+```
+wechatAGENT/
+├── core/                   # 核心大脑与逻辑
+│   ├── brain.py            # 自省中枢
+│   ├── tool_manager.py     # 动态工具管理器
+│   ├── agent.py            # LangChain Agent 集成
+│   ├── config.py           # 配置管理
+│   ├── env_init.py         # 环境初始化
+│   └── tools/              # 核心演化与解码工具
+├── kernel/                 # 内核级守门员
+│   ├── bin/                # 存放 SILK/FFMPEG 二进制文件
+│   ├── overseer.py         # 守护进程
+│   └── privilege_guard.py  # 管理员提权逻辑
+├── tools/                  # 业务工具库 (RPA, Search, Data...)
+├── wechat/                 # 微信 UI 自动化监听与发送
+├── worker/                 # 异步任务处理器
+├── utils/                  # 稳定性、日志与自检工具
+├── scheduler/              # 任务调度器
+├── config/                 # 配置文件
+├── data/                   # 数据存储
+├── logs/                   # 日志文件
+└── temp/                   # 临时文件
+```
+
+### 添加新工具
+1. 在 `tools/` 目录下创建新的 Python 文件
+2. 使用 `@tool` 装饰器标记函数
+3. 确保函数有清晰的文档字符串
+4. 工具会自动被 `ToolManager` 扫描加载
+
+示例：
+```python
+from langchain.tools import tool
+
+@tool
+def my_new_tool(param1: str, param2: int):
+    """
+    工具描述：这个工具用于...
+    
+    Args:
+        param1: 参数1的描述
+        param2: 参数2的描述
+        
+    Returns:
+        执行结果的描述
+    """
+    # 工具实现逻辑
+    return f"执行结果: {param1} - {param2}"
+```
+
+### 代码演化流程
+IronSentinel 支持透明演化闭环：
+1. **汇报**: 接收指令后，通过 `report_evolution_progress` 同步计划
+2. **编码**: 使用 `evolve_code` 工具进行代码修改
+3. **重启**: 请求 `request_hot_reload`，系统重生后自动发送成功通知
+
+### 调试与日志
+- 日志文件保存在 `logs/` 目录
+- 支持不同日志级别：DEBUG, INFO, WARNING, ERROR
+- 可以通过 `.env` 中的 `LOG_LEVEL` 配置日志级别
+
+---
+
+## 📖 详细开发文档
+
+完整的开发指南请查看 [DEVELOPMENT_GUIDE.md](DEVELOPMENT_GUIDE.md)，包含：
+- 详细的项目架构说明
+- 核心模块功能详解
+- 环境要求与配置
+- 常见问题解决方案
+- 安全注意事项
+- 贡献指南
+
+---
+
+## 🔧 运行模式
+
+### 1. 标准模式
+```bash
+python main.py
+```
+- 启动所有模块
+- 监听微信消息
+- 处理用户请求
+
+### 2. 守护模式
+```bash
+python kernel/overseer.py
+```
+或
+```bash
+run_sentinel.bat
+```
+- 增强的监控和恢复机制
+- 自动重启失败组件
+- 系统级守护
+
+### 3. 开发模式
+```bash
+# 启用调试日志
+set LOG_LEVEL=DEBUG
+python main.py
+```
+
+---
+
+## ❓ 常见问题
+
+### Q1: 启动时提示缺少 API Key
+A: 检查 `.env` 文件是否已正确配置对应的 API Key。
+
+### Q2: 微信消息无法接收
+A: 
+1. 确保微信客户端已登录
+2. 检查白名单配置
+3. 确认微信窗口未被最小化
+
+### Q3: 语音功能无法使用
+A:
+1. 运行 `python tools/initialize_env.py` 初始化二进制组件
+2. 检查 `kernel/bin/` 目录下是否有必要的可执行文件
+
+### Q4: 代理配置问题
+A:
+1. 在 `.env` 中配置 `HTTPS_PROXY` 和 `HTTP_PROXY`
+2. 确保代理地址和端口正确
+3. 重启程序使配置生效
 
 ---
 
