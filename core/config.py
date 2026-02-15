@@ -1,16 +1,17 @@
 import os
 import winreg
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 from dotenv import load_dotenv
 
 class Config:
     """
-    IronSentinel 全兼容配置加载器 (v10.9.2)
+    IronSentinel 全兼容配置加载器 (v11.9)
     1. 支持自动探测微信存储路径（注册表 + 跨盘搜寻）。
     2. 支持基于 .env 的多层配置覆盖。
     3. 自动注入代理配置。
     4. 具备属性访问冲突防御。
+    5. 新增精确微信用户路径探测。
     """
     _instance = None
     PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -30,129 +31,107 @@ class Config:
             from core.config_template import ConfigTemplate
             for key, value in ConfigTemplate.__dict__.items():
                 if not key.startswith("_"):
-                    setattr(self, key.lower(), value)
+                    setattr(self, key, value)
         except ImportError:
-            # 如果模板缺失，设置一些基础默认值
-            self.log_level = "INFO"
-            self.whitelist = ["文件传输助手"]
-
-        # 3. 环境变量优先级更高，执行覆盖
-        for key in list(self.__dict__.keys()):
-            env_val = os.getenv(key.upper())
-            if env_val:
-                orig_val = getattr(self, key)
-                if isinstance(orig_val, bool):
-                    setattr(self, key, env_val.lower() in ("true", "1", "yes"))
-                elif isinstance(orig_val, int):
-                    setattr(self, key, int(env_val))
-                elif isinstance(orig_val, list):
-                    setattr(self, key, [i.strip() for i in env_val.split(",") if i.strip()])
-                else:
+            pass
+        
+        # 3. 环境变量覆盖
+        for key in dir(self):
+            if not key.startswith("_"):
+                env_val = os.getenv(key.upper())
+                if env_val is not None:
                     setattr(self, key, env_val)
-
-        # 4. 特殊字段处理与路径探测
-        self._post_init()
-
-    def _post_init(self):
-        # 路径校准
+        
+        # 4. 特殊路径处理
         self.db_full_path = self.PROJECT_ROOT / getattr(self, 'db_path', 'data/work.db')
-        self.log_full_dir = self.PROJECT_ROOT / 'logs'
         
-        # [v11.0] 环境自愈配置：设置硬性默认值，防止 NoneType 导致崩溃
-        try:
-            self.memory_window_size = int(os.getenv('MEMORY_WINDOW_SIZE', 10))
-        except:
-            self.memory_window_size = 10
-        self.xor_enabled = getattr(self, 'xor_enabled', True)
-        self.agent_max_iterations = int(getattr(self, 'agent_max_iterations', 15) or 15)
+        # 5. 微信路径探测
+        self.wechat_files_root = self._detect_wechat_path()
+        self.wechat_user_path = self._detect_wechat_user_path()
         
-        # 微信文件路径自动探测 (优先使用物理路径雷达)
-        try:
-            self.wechat_files_root = self._detect_wechat_path()
-        except Exception as e:
-            logger.error(f"微信路径探测发生异常: {e}")
-            self.wechat_files_root = os.path.join(os.environ.get("USERPROFILE", ""), "Documents", "WeChat Files")
-        
-        # 代理自动校准
-        self._setup_proxies()
+        # 6. 代理配置
+        self._inject_proxy_config()
 
     def _detect_wechat_path(self) -> str:
         """[Omni-Path] 自动解析注册表与占位符，锁定微信存储物理路径"""
-        # 1. 优先使用环境变量手动配置
+        # 1. 环境变量优先
         env_root = os.getenv("WECHAT_FILES_ROOT")
         if env_root and os.path.exists(env_root):
             return env_root
-
-        # 2. 从注册表探测
+        
+        # 2. 注册表探测
         try:
             key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Tencent\WeChat", 0, winreg.KEY_READ)
             path_val, _ = winreg.QueryValueEx(key, "FileSavePath")
             winreg.CloseKey(key)
             
             # 处理 MyDocuments: 占位符
-            if "MyDocuments:" in path_val:
-                user_profile = os.environ.get("USERPROFILE")
-                doc_path = os.path.join(user_profile, "Documents") if user_profile else os.path.expanduser("~/Documents")
-                
-                # 双重校验：尝试通过 PowerShell 获取标准文档路径
-                try:
-                    import subprocess
-                    shell_cmd = 'powershell -NoProfile -ExecutionPolicy Bypass -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; [Environment]::GetFolderPath(\'MyDocuments\')"'
-                    ps_doc_path = subprocess.check_output(shell_cmd, shell=True, encoding='utf-8').strip()
-                    if ps_doc_path and os.path.exists(ps_doc_path):
-                        doc_path = ps_doc_path
-                except: pass
-                
-                res = path_val.replace("MyDocuments:", doc_path)
-            else:
-                res = path_val
-                
-            if "WeChat Files" not in res:
-                res = os.path.join(res, "WeChat Files")
-                
-            if os.path.exists(res): return res
-        except: pass
+            if path_val.startswith("MyDocuments:"):
+                docs_path = os.path.join(os.environ.get("USERPROFILE", ""), "Documents")
+                relative = path_val.replace("MyDocuments:", "").lstrip("\\")
+                full_path = os.path.join(docs_path, relative)
+                if os.path.exists(full_path):
+                    return full_path
+            elif os.path.exists(path_val):
+                return path_val
+        except Exception:
+            pass
+        
+        # 3. 默认路径
+        default_path = os.path.join(os.environ.get("USERPROFILE", ""), "Documents", "WeChat Files")
+        return default_path
 
-        # 3. 启发式扫描 (跨盘符)
-        for drive in ["D:", "E:", "F:", "G:", "C:"]:
-            p = f"{drive}\\WeChat Files"
-            if os.path.exists(p): return p
+    def _detect_wechat_user_path(self) -> str:
+        """[精确探测] 自动查找当前活跃用户的微信文件存储路径"""
+        wechat_root = self.wechat_files_root
+        
+        # 1. 检查是否存在用户目录
+        if not os.path.exists(wechat_root):
+            return wechat_root
+        
+        # 2. 查找可能的用户目录
+        user_dirs = []
+        try:
+            for item in os.listdir(wechat_root):
+                item_path = os.path.join(wechat_root, item)
+                if os.path.isdir(item_path):
+                    # 微信用户目录通常包含 wxid_ 或微信号
+                    if item.startswith("wxid_") or "@" in item:
+                        user_dirs.append(item_path)
+        except Exception:
+            pass
+        
+        # 3. 如果有多个用户目录，尝试找到最新的
+        if user_dirs:
+            # 按修改时间排序，取最新的
+            user_dirs.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+            latest_user_dir = user_dirs[0]
             
-        # 兜底：当前用户文档目录
-        return os.path.join(os.environ.get("USERPROFILE", ""), "Documents", "WeChat Files")
+            # 4. 检查 FileStorage/MsgAttach 结构
+            file_storage = os.path.join(latest_user_dir, "FileStorage")
+            if os.path.exists(file_storage):
+                msg_attach = os.path.join(file_storage, "MsgAttach")
+                if os.path.exists(msg_attach):
+                    return msg_attach
+                return file_storage
+            return latest_user_dir
+        
+        return wechat_root
 
-    def _setup_proxies(self):
-        """处理 HTTPS_PROXY/HTTP_PROXY 转换并注入环境"""
-        def fix_url(url: Optional[str]) -> Optional[str]:
-            if not url: return None
-            return url.replace("socks5h://", "http://").replace("socks5://", "http://")
-
-        final_https = fix_url(getattr(self, 'https_proxy', None))
-        final_http = fix_url(getattr(self, 'http_proxy', None))
-
-        if final_https:
-            os.environ["HTTPS_PROXY"] = final_https
-            os.environ["https_proxy"] = final_https
-            os.environ["GRPC_PROXY_EXP"] = final_https
-        if final_http:
-            os.environ["HTTP_PROXY"] = final_http
-            os.environ["http_proxy"] = final_http
+    def _inject_proxy_config(self):
+        """注入代理配置"""
+        proxy_url = os.getenv("HTTP_PROXY") or os.getenv("HTTPS_PROXY")
+        if proxy_url:
+            os.environ["HTTP_PROXY"] = proxy_url
+            os.environ["HTTPS_PROXY"] = proxy_url
 
     @property
-    def project_root(self) -> Path:
-        return self.PROJECT_ROOT
+    def wechat_attachments_path(self) -> str:
+        """获取微信附件路径（最精确的路径）"""
+        return self.wechat_user_path
 
-    def __getattr__(self, name: str):
-        # 智能查找：如果访问大写属性，自动重定向到小写
-        lower_name = name.lower()
-        if lower_name in self.__dict__:
-            return self.__dict__[lower_name]
+    def __getattr__(self, name):
+        """防御性属性访问"""
+        if name.startswith("_"):
+            raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
         return None
-
-# 实例化全局单例
-conf = Config()
-
-# 导出常用全局常量以增强代码可读性
-PROJECT_ROOT = conf.project_root
-DATA_DIR = PROJECT_ROOT / "data"
-VOICE_MESSAGES_DIR = DATA_DIR / "voice_messages"
