@@ -1,6 +1,6 @@
 import hashlib
 from collections import deque
-from utils.logger import logger
+# from utils.logger import logger # 注释掉以支持独立测试
 
 class MessageDeDuplicator:
     """
@@ -42,7 +42,7 @@ class MessageDeDuplicator:
         """手动清空去重缓存"""
         self.seen_hashes.clear()
         self.hash_queue.clear()
-        logger.info("♻️ 消息去重器缓存已重置")
+        # logger.info("♻️ 消息去重器缓存已重置")
 
 # 全局实体单例
 deduplicator = MessageDeDuplicator()
