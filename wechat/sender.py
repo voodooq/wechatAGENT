@@ -63,8 +63,8 @@ class WechatSender:
                 # 在当前线程初始化新的 WeChat 实例
                 self._local.wx = WeChat()
             else:
-                # 连通性测试：尝试访问一个轻量属性
-                _ = self._local.wx.UiaName
+                # 连通性测试：尝试访问 UiaAPI.Name 确保句柄仍然有效
+                _ = self._local.wx.UiaAPI.Name
         except Exception as e:
             logger.warning(f"♻️ [COM Guard] 检测到微信句柄失效 ({e})，正在重新初始化...")
             import pythoncom

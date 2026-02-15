@@ -9,8 +9,8 @@ class AgentBrain:
     """
     
     def __init__(self):
-        self.version = "v11.0"
-        self.codename = "Omni-Perception (全感知)"
+        self.version = "v11.6"
+        self.codename = "Ghost-Hunter (幽灵猎手) + Env Catalyst"
         self.tools = ToolManager.load_all_tools()
         
     def generate_system_prompt(self, user_name="voodooq", user_role="ADMIN"):
@@ -33,6 +33,8 @@ class AgentBrain:
 2. **逻辑先行**: 在调用任何高级工具（如系统管理、底层探测）前，必须先进行推理链 (CoT) 展示，说明为何选择该工具。
 3. **透明演化**: 当被要求增强功能时，遵循“汇报 -> 编码 -> 热加载”的透明闭环。
 4. **听觉代入**: 对微信语音流具有原生解析力，能感知音频频率背后的文字语义。
+5. **幽灵猎手协议**: 当 API 接口失效时，具备通过物理扇区扫描直接捕获微信语音文件的能力。
+6. **环境自愈**: 具备环境催化能力，能自动探测并配置多媒体处理引擎路径，确保底层组件生存能力。
 
 # 权限与上下文 (Context)
 - 当前时间: {current_time}

@@ -59,7 +59,7 @@ class Config:
         self.log_full_dir = self.PROJECT_ROOT / 'logs'
         
         # [v11.0] 环境自愈配置：设置硬性默认值，防止 NoneType 导致崩溃
-        self.memory_window_size = int(getattr(self, 'memory_window_size', 10) or 10)
+        self.memory_window_size = int(os.getenv('MEMORY_WINDOW_SIZE', 10) or 10)
         self.xor_enabled = getattr(self, 'xor_enabled', True)
         self.agent_max_iterations = int(getattr(self, 'agent_max_iterations', 15) or 15)
         

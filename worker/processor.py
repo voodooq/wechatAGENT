@@ -73,36 +73,37 @@ class MessageProcessor:
                             temp_dir = os.path.join(conf.project_root, "temp", "voice")
                             os.makedirs(temp_dir, exist_ok=True)
                             
-                            # [Fix v10.2.5] 增加对象鲁棒性检查
-                            if not hasattr(message.raw, 'SaveVoice'):
-                                logger.warning(f"消息对象 {type(message.raw)} 缺少 SaveVoice 方法")
-                                raise Exception("当前消息对象不支持语音提取")
-                                
-                            # 保存语音文件 (wxauto 的 msg 对象 SaveVoice 方法)
-                            save_path = message.raw.SaveVoice(savepath=temp_dir)
+                            # [v11.5 Ghost-Hunter] 幽灵猎手协议：物理解封与快速寻路
+                            save_path = None
                             
-                            # [Fix v10.5.5] 增强路径适配与手动提取逻辑
+                            # 1. 尝试常规提取 (如果具备接口)
+                            if hasattr(message.raw, 'SaveVoice'):
+                                try:
+                                    save_path = message.raw.SaveVoice(savepath=temp_dir)
+                                except Exception as e:
+                                    logger.warning(f"SaveVoice 接口调用失败: {e}，将启动物理探测补救...")
+
+                            # 2. 物理寻路雷达 (自愈降级)
                             if not save_path or not os.path.exists(save_path):
-                                logger.warning("SaveVoice 提取失败，启动‘深度搜寻’降级方案...")
-                                from utils.wechat_utils import find_latest_voice_file
-                                
-                                # 尝试从文件系统中“捞取”最新的语音文件
-                                # conf.wechat_files_root 在 core.config 中已自动探测
-                                manual_path = find_latest_voice_file(conf.wechat_files_root)
+                                logger.info("🎯 [Ghost-Hunter] 启动物理扇区扫描以捕获语音流...")
+                                from utils.wechat_utils import fast_scan_voice_file
+                                # 优先使用我们之前实现的极速雷达，并在 10 秒窗口内锁定
+                                manual_path = fast_scan_voice_file(conf.wechat_files_root, scout_seconds=10)
                                 
                                 if manual_path and os.path.exists(manual_path):
-                                    logger.info(f"🧩 手动检索成功: {manual_path}")
+                                    logger.info(f"✅ [Ghost-Hunter] 成功锁定物理路径: {manual_path}")
                                     import shutil
                                     dest_path = os.path.join(temp_dir, os.path.basename(manual_path))
                                     shutil.copy2(manual_path, dest_path)
                                     save_path = dest_path
                                 else:
-                                    # 最后的残余搜寻逻辑
-                                    files = [os.path.join(temp_dir, f) for f in os.listdir(temp_dir) 
-                                             if f.endswith(('.silk', '.amr', '.mp3', '.m4a', '.wav'))]
-                                    if files:
-                                        save_path = max(files, key=lambda f: os.path.getmtime(os.path.join(temp_dir, f)))
-                                        save_path = os.path.join(temp_dir, save_path)
+                                    # 如果是 Master 线程必须报错，否则静默跳过
+                                    if is_master_thread and not is_self_msg:
+                                        raise Exception("物理寻路失败：未能在微信目录中找到刚生成的语音文件")
+                                    elif is_self_msg and not is_master_thread:
+                                        raise StopIteration("跳过无法寻路的自发消息")
+                                    else:
+                                        raise Exception("当前消息对象不支持语音提取且物理寻路失败")
                             
                             if save_path and os.path.exists(save_path):
                                 # [Fix v10.5.2] 检查文件大小

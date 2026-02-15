@@ -9,8 +9,15 @@ import time
 import signal
 import nest_asyncio
 
-# [v7.2 Patch] 允许在异步事件循环中进行嵌套调用，解决 Playwright 等工具的冲突问题
+# [v7.2 Patch] 允许在异步事件循环中进行嵌套调用
 nest_asyncio.apply()
+
+# [v11.6 Evolution] 环境自愈催化剂：强制探测并注入全局 FFmpeg 路径
+try:
+    from core.env_init import setup_ffmpeg_environment
+    setup_ffmpeg_environment()
+except Exception as e:
+    print(f"环境初始化异常: {e}")
 
 from core.config import conf
 from utils.logger import logger

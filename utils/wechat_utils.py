@@ -37,49 +37,53 @@ def get_wechat_file_root():
             
     return possible_roots[-1]
 
-def find_latest_voice_file(wx_root, sender_name=None):
+def find_latest_voice_file(wx_root, scout_seconds=30):
     """
-    在微信根目录下寻找最新的语音文件 (silk/amr)。
-    由于 wxid 目录名称通常是模糊的，我们会扫描整个 WeChat Files 下的所有 FileStorage/Voice 目录。
+    [旧版保留] 在微信根目录下寻找最新的语音文件 (silk/amr)。
+    出于兼容性保留，但在 v11.0 中推荐优先使用 fast_scan_voice_file。
+    """
+    if not os.path.exists(wx_root):
+        return None
+    return fast_scan_voice_file(wx_root, scout_seconds)
+
+def fast_scan_voice_file(wx_root: str, scout_seconds: int = 15) -> str | None:
+    """
+    [v11.0 物理解封] 使用原生 shell 命令极速定位最新语音文件。
+    绕过 Python os.walk 的缓慢遍历，直接利用 Windows dir 索引。
     """
     if not os.path.exists(wx_root):
         logger.error(f"微信根目录不存在: {wx_root}")
         return None
 
-    logger.info(f"🔍 正在从微信根目录检索语音: {wx_root}")
-    
-    # 查找所有 FileStorage/Voice 结尾的目录
-    voice_dirs = []
-    for root, dirs, files in os.walk(wx_root):
-        if root.endswith(os.path.join("FileStorage", "Voice")):
-            voice_dirs.append(root)
-            # 限制扫描深度，防止太慢
-            if len(voice_dirs) > 20: break 
-
-    if not voice_dirs:
-        logger.warning("未找到任何语音存储目录 (FileStorage/Voice)")
-        return None
-
-    latest_file = None
-    latest_time = 0
-
-    # 在所有语音目录中找最新的文件
-    for d in voice_dirs:
-        try:
-            for f in os.listdir(d):
-                if f.endswith(('.silk', '.amr', '.wav')):
-                    f_path = os.path.join(d, f)
-                    f_time = os.path.getmtime(f_path)
-                    if f_time > latest_time:
-                        latest_time = f_time
-                        latest_file = f_path
-        except: continue
-
-    # 检查文件是否是最近生成的（比如 10 秒内）
+    import subprocess
     import time
-    if latest_file and (time.time() - latest_time) < 30:
-        logger.info(f"✅ 成功定位到最新产生的语音文件: {latest_file}")
-        return latest_file
     
-    logger.warning("未能找到最近 30 秒内生成的语音文件")
+    logger.info(f"🔍 [Scanner] 启动物理解封雷达，目标: {wx_root}")
+    
+    # 锁定 FileStorage/Voice 路径模式
+    # 使用 dir /S /B /O-D 按照时间逆序快速列出所有 .silk 文件
+    try:
+        # 强制 UTF-8 环境以支持中文路径探测
+        cmd = f'chcp 65001 >nul && dir "{wx_root}\\*FileStorage\\Voice\\*.silk" /S /B /O-D'
+        result = subprocess.check_output(cmd, shell=True, encoding='utf-8', errors='ignore')
+        
+        lines = [line.strip() for line in result.split("\n") if line.strip() and line.endswith(".silk")]
+        
+        if not lines:
+            logger.warning("未能在物理路径发现任何 .silk 文件")
+            return None
+            
+        # 验证最新文件的时间戳是否在范围内
+        latest_file = lines[0]
+        if os.path.exists(latest_file):
+            mtime = os.path.getmtime(latest_file)
+            if (time.time() - mtime) < scout_seconds:
+                logger.info(f"✅ [Scanner] 成功捕获物理残留: {latest_file} (offset: {int(time.time() - mtime)}s)")
+                return latest_file
+            else:
+                logger.debug(f"最新文件过于陈旧 ({int(time.time() - mtime)}s前)，忽略")
+                
+    except Exception as e:
+        logger.debug(f"物理扫描过程提示: {e} (通常是因为目录下没有匹配文件)")
+        
     return None
