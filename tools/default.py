@@ -85,7 +85,7 @@ def read_pdf_invoice(file_path: str) -> dict:
 def recognize_speech_from_audio(audio_file_path: str) -> dict:
     """
     将音频文件（silk, amr, mp3, m4a等）转换为文本。
-    支持微信独有的 SILK 格式自动解码。
+    支持微信独有的 SILK 格式自动解码与头部修复 (v11.0)。
 
     Args:
         audio_file_path: 音频文件的本地路径。
@@ -96,7 +96,7 @@ def recognize_speech_from_audio(audio_file_path: str) -> dict:
     import time
     
     project_root = conf.project_root
-    decoder_exe = os.path.join(project_root, "tools", "bin", "silk_v3_decoder.exe")
+    decoder_exe = os.path.join(project_root, "kernel", "bin", "silk_v3_decoder.exe")
     wav_path = audio_file_path + ".recon.wav"
     pcm_path = audio_file_path + ".temp.pcm"
     
@@ -106,36 +106,45 @@ def recognize_speech_from_audio(audio_file_path: str) -> dict:
         if not os.path.exists(audio_file_path):
             return {"status": "error", "message": f"源音频文件不存在: {audio_file_path}"}
             
-        # 1. 检查是否为 SILK 格式 (微信语音常见格式)
+        # 1. 检查是否为 SILK 格式并处理缺失头部 (v11.0 逻辑)
         is_silk = False
+        SILK_HEADER = b"#!SILK_V3"
         with open(audio_file_path, 'rb') as f:
             header = f.read(10)
-            if b"#!SILK_V3" in header:
-                is_silk = True
         
-        # [Fix v10.5.3] 统一转码标准：强制转换为 16000Hz, 单声道, 16bit PCM WAV
-        # Google ASR 对采样率非常敏感，如果是 24k 或 44.1k 识别率会下降
+        if SILK_HEADER in header:
+            is_silk = True
+        elif audio_file_path.lower().endswith((".silk", ".aud")):
+            # 可能是缺失头部的 silk 文件，尝试通过后缀名辅助判断并修复
+            from core.tools.voice_decoder import fix_silk_header
+            fixed_path = fix_silk_header(audio_file_path)
+            if fixed_path != audio_file_path:
+                logger.info(f"🧬 [ASR] 自动修复缺失头部的 Silk 文件: {audio_file_path}")
+                audio_file_path = fixed_path
+                is_silk = True
+
+        # [Fix v11.0] 统一转码标准：强制使用 chcp 65001 确保 Windows 路径兼容
         if is_silk:
             if not os.path.exists(decoder_exe):
-                return {"status": "error", "message": f"缺少 SILK 解码器: {decoder_exe}"}
+                # 尝试从备份路径加载
+                decoder_exe = os.path.join(project_root, "tools", "bin", "silk_v3_decoder.exe")
+                if not os.path.exists(decoder_exe):
+                    return {"status": "error", "message": f"缺少 SILK 解码器: {decoder_exe}"}
                 
             logger.info(f"🧬 [ASR] 检测到 SILK 格式，解码器: {decoder_exe}")
             # SILK -> PCM
-            subprocess.run([decoder_exe, audio_file_path, pcm_path], capture_output=True, check=True)
+            cmd_silk = f'chcp 65001 >nul && "{decoder_exe}" "{audio_file_path}" "{pcm_path}"'
+            subprocess.run(cmd_silk, shell=True, capture_output=True, check=True)
             
             # [Core Patch] PCM -> WAV (通过 FFmpeg 重新采样至 16k 黄金频率)
             logger.info(f"🧬 [ASR] 执行 PCM 到 WAV 转换 (采样率校准: 16000Hz)")
-            subprocess.run([
-                "ffmpeg", "-y", "-f", "s16le", "-ar", "24000", "-ac", "1", 
-                "-i", pcm_path, 
-                "-ar", "16000", wav_path
-            ], capture_output=True, check=True)
+            cmd_ffmpeg = f'chcp 65001 >nul && ffmpeg -y -f s16le -ar 24000 -ac 1 -i "{pcm_path}" -ar 16000 "{wav_path}"'
+            subprocess.run(cmd_ffmpeg, shell=True, capture_output=True, check=True)
         else:
             # 尝试直接通过 ffmpeg 转换 (适用于 mp3, amr, m4a 等)
             logger.info(f"🧬 [ASR] 执行通用转码 (FFmpeg, 目标频率: 16000Hz): {audio_file_path}")
-            subprocess.run([
-                "ffmpeg", "-y", "-i", audio_file_path, "-ar", "16000", "-ac", "1", wav_path
-            ], capture_output=True, check=True)
+            cmd_ffmpeg_generic = f'chcp 65001 >nul && ffmpeg -y -i "{audio_file_path}" -ar 16000 -ac 1 "{wav_path}"'
+            subprocess.run(cmd_ffmpeg_generic, shell=True, capture_output=True, check=True)
             
         # 2. 语音识别校验
         if not os.path.exists(wav_path):
@@ -148,15 +157,14 @@ def recognize_speech_from_audio(audio_file_path: str) -> dict:
             return {"status": "error", "message": "转换后的音频文件过小，可能是静音或解码异常"}
 
         r = sr.Recognizer()
-        # [Optimization] 动态调整环境噪音阈值
         r.energy_threshold = 300 
         r.dynamic_energy_threshold = True
         
         with sr.AudioFile(wav_path) as source:
             audio = r.record(source)
         
-        # 使用 Google 语音识别 (国内需梯子，已通过全局代理处理)
-        logger.info("🧬 [ASR] 正在向 Google 提交识别请求 (代理: %s)..." % os.getenv("HTTPS_PROXY", "None"))
+        # 使用 Google 语音识别
+        logger.info("🧬 [ASR] 正在向 Google 提交识别请求...")
         text = r.recognize_google(audio, language="zh-CN")
         
         # 3. 清理现场
@@ -164,19 +172,22 @@ def recognize_speech_from_audio(audio_file_path: str) -> dict:
             if os.path.exists(p):
                 try: os.remove(p)
                 except: pass
+        
+        # 如果是修复生成的文件，也清理掉
+        if "_fixed.silk" in audio_file_path:
+             try: os.remove(audio_file_path)
+             except: pass
                 
-        logger.info(f"🧬 [ASR] 识别成功! 结果: \"{text}\", 总耗时: {time.time()-start_time:.2f}s")
+        logger.info(f"🧬 [ASR] 识别成功! 结果: \"{text}\"")
         return {"status": "success", "recognized_text": text}
         
     except subprocess.CalledProcessError as e:
-        error_msg = e.stderr.decode() if e.stderr else str(e)
+        error_msg = e.stderr.decode('utf-8', errors='ignore') if e.stderr else str(e)
         logger.error(f"🧬 [ASR] 解码失败: {error_msg}")
         return {"status": "error", "message": f"解码失败: {error_msg}"}
     except sr.UnknownValueError:
-        logger.warning("🧬 [ASR] 识别结果为空 (UnknownValueError)")
         return {"status": "error", "message": "无法识别音频内容，识别结果为空或底噪太大"}
     except sr.RequestError as e:
-        logger.error(f"🧬 [ASR] Google API 请求失败: {e}")
         return {"status": "error", "message": f"网络请求失败，请检查代理配置: {e}"}
     except Exception as e:
         logger.error(f"🧬 [ASR] 链路异常: {e}")

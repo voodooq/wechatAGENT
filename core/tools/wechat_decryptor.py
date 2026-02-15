@@ -6,8 +6,8 @@ from utils.logger import logger
 @tool
 def decrypt_wechat_dat(file_path: str) -> str:
     """
-    [解密] 自动识别并破解微信 PC 端 .dat 加密文件。
-    支持：将加密的 .dat 媒体流还原为原始格式。
+    [解密] 自动探测 XOR 密钥并还原微信 .dat 加密文件 (v11.0)。
+    支持：JPG, PNG, GIF 的精准探测与验证。
     """
     input_path = Path(file_path)
     if not input_path.exists():
@@ -17,20 +17,21 @@ def decrypt_wechat_dat(file_path: str) -> str:
         with open(input_path, 'rb') as f:
             data = f.read()
 
-        if not data:
-            return "❌ 错误：文件为空。"
+        if len(data) < 2:
+            return "❌ 错误：文件太小，无法探测密钥。"
 
-        # 1. 自动探测 XOR 密钥 (通过常用图片头进行暴力匹配)
-        # JPG: 0xFF D8 | PNG: 0x89 50 | GIF: 0x47 49
-        headers = [0xFF, 0xD8, 0x89, 0x50, 0x47, 0x49]
+        # 1. 自动探测 XOR 密钥 (常用文件头：JPG(0xFFD8), PNG(0x8950), GIF(0x4749))
+        possible_headers = [0xFF, 0x89, 0x47]
         xor_key = None
+        ext = ".decoded"
         
-        for header_byte in headers:
-            potential_key = data[0] ^ header_byte
-            if len(data) > 1 and (data[1] ^ potential_key) in headers:
-                xor_key = potential_key
-                break
-        
+        for head in possible_headers:
+            key = data[0] ^ head
+            # 验证第二个字节是否匹配
+            if head == 0xFF and (data[1] ^ key) == 0xD8: xor_key = key; ext = ".jpg"; break
+            if head == 0x89 and (data[1] ^ key) == 0x50: xor_key = key; ext = ".png"; break
+            if head == 0x47 and (data[1] ^ key) == 0x49: xor_key = key; ext = ".gif"; break
+
         if xor_key is None:
             return "❌ 失败：未能探测到有效的 XOR 密钥，文件可能未加密或格式不支持。"
 
@@ -39,20 +40,15 @@ def decrypt_wechat_dat(file_path: str) -> str:
         
         # 3. 保存至临时目录
         from core.config import conf
-        output_dir = conf.PROJECT_ROOT / "temp" / "decrypted"
+        output_dir = conf.project_root / "temp" / "decrypted"
         output_dir.mkdir(parents=True, exist_ok=True)
-        
-        # 根据推导出的头部猜测后缀
-        ext = ".jpg"
-        if (decrypted_data[0] == 0x89): ext = ".png"
-        elif (decrypted_data[0] == 0x47): ext = ".gif"
         
         output_path = output_dir / f"{input_path.stem}_decrypted{ext}"
         
         with open(output_path, 'wb') as f:
             f.write(decrypted_data)
 
-        logger.info(f"🧬 [Decryptor] 成功解密文件: {output_path} (Key: {hex(xor_key)})")
+        logger.info(f"🧬 [Decryptor] v11.0 成功解密文件: {output_path} (Key: {hex(xor_key)})")
         return str(output_path.absolute())
 
     except Exception as e:
