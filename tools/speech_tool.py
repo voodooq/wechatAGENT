@@ -82,7 +82,8 @@ async def async_tts_and_play(text: str):
         try:
             from core.tools.audio_converter import convert_to_silk
             logger.info(f"🧬 [Native Voice] 正在执行 SILK 格式转码...")
-            silk_path = convert_to_silk(audio_path)
+            # [v11.0 Neuro-Repair] 使用 .invoke() 调用以消除弃用警告
+            silk_path = convert_to_silk.invoke(audio_path)
             
             if silk_path and not silk_path.startswith("❌"):
                 logger.info(f"✅ SILK 转码成功: {silk_path}")

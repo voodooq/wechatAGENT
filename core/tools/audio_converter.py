@@ -37,15 +37,14 @@ def convert_to_silk(input_path: str) -> str:
         )
 
         # 2. 第二步：使用 silk_v3_encoder 进行编码
+        # [v11.0 Neuro-Repair] 启动自愈检查
+        from core.tools.env_healer import ensure_binary_environment
+        ensure_binary_environment("silk_v3_encoder.exe")
+        
         encoder_path = conf.project_root / "kernel" / "bin" / "silk_v3_encoder.exe" 
         
         if not encoder_path.exists():
-            # 兼容性检查：尝试 tools/bin
-            alt_path = conf.project_root / "tools" / "bin" / "silk_v3_encoder.exe"
-            if alt_path.exists():
-                encoder_path = alt_path
-            else:
-                return "❌ [环境缺失] 找不到 silk_v3_encoder.exe。请检查路径或运行补全脚本。"
+            return "❌ [环境缺失] 无法自动补全 silk_v3_encoder.exe。请手动修复环境。"
 
         cmd_encoder_str = ' '.join([f'"{s}"' for s in [str(encoder_path), str(pcm_path), str(output_silk)]])
         subprocess.run(

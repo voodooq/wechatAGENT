@@ -54,12 +54,22 @@ class WechatSender:
             self._sent_cache.append((receiver, msg_type_label))
 
     def _ensureWechat(self):
-        """确保当前线程的微信连接可用"""
-        if not hasattr(self._local, 'wx'):
+        """确保当前线程的微信连接可用 (增强 COM 鲁棒性)"""
+        try:
+            if not hasattr(self._local, 'wx'):
+                import pythoncom
+                pythoncom.CoInitialize()
+                from wxauto import WeChat
+                # 在当前线程初始化新的 WeChat 实例
+                self._local.wx = WeChat()
+            else:
+                # 连通性测试：尝试访问一个轻量属性
+                _ = self._local.wx.UiaName
+        except Exception as e:
+            logger.warning(f"♻️ [COM Guard] 检测到微信句柄失效 ({e})，正在重新初始化...")
             import pythoncom
             pythoncom.CoInitialize()
             from wxauto import WeChat
-            # 在当前线程初始化新的 WeChat 实例
             self._local.wx = WeChat()
 
     def _activateChat(self, who: str):

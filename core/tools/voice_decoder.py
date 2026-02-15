@@ -54,11 +54,13 @@ def decode_silk_to_wav(silk_path: str) -> str:
 
     try:
         # 1. 环境自检与自愈
+        # [v11.0 Neuro-Repair] 启动自愈检查
+        from core.tools.env_healer import ensure_binary_environment
+        ensure_binary_environment("silk_v3_decoder.exe")
+        
         decoder_path = conf.project_root / "kernel" / "bin" / "silk_v3_decoder.exe"
         if not decoder_path.exists():
-            from core.tools.binary_manager import download_and_verify_binary
-            res = download_and_verify_binary.invoke("silk_v3_decoder.exe")
-            if "❌" in res: return res
+            return "❌ [环境缺失] 无法自动补全 silk_v3_decoder.exe。请手动修复环境。"
 
         # 2. 第一步：Silk -> PCM
         # 强制 UTF-8 环境以支持 Windows 中文路径

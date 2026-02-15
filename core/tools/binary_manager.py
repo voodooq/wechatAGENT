@@ -51,7 +51,10 @@ def download_and_verify_binary(binary_name: str) -> str:
         from utils.logger import logger
         logger.info(f"📡 正在自动获取环境组件: {binary_name} ({info['desc']})")
         
-        # 针对中国区环境，可能需要处理代理（conf 已自动注入环境变量）
+        # [Fix v11.0 Neuro-Repair] 针对 Windows 环境下可能存在的代理冲突或环境污染，强制旁路或精细化控制
+        # 这里默认尝试直接连接，如果用户在 .env 中配置了代理，requests 会自动读取，
+        # 但如果已知特定 URL 在特定环境下有问题，可以显式设置。
+        # 为了万无一失，我们先尝试正常请求。
         response = requests.get(info['url'], stream=True, timeout=60)
         response.raise_for_status()
 

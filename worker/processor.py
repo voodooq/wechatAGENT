@@ -55,8 +55,11 @@ class MessageProcessor:
                     if is_voice_input:
                         try:
                             # [Fix v10.5.1] 检查消息对象类型。如果是自发消息 (SelfMessage)，wxauto 不支持语音提取，需静默跳过。
+                            # [v11.0 Neuro-Repair] 针对“文件传输助手”特殊会话，强行解除 self 限制，实现语音闭环交互。
                             is_self_msg = type(message.raw).__name__ == 'SelfMessage'
-                            if is_self_msg:
+                            is_master_thread = message.sender == "文件传输助手"
+                            
+                            if is_self_msg and not is_master_thread:
                                 logger.debug(f"🔇 收到自发语音消息 [{message.content}]，已跳过转录流程 (wxauto 不支持)")
                                 user_input = message.content
                                 raise StopIteration("跳过自发消息处理")
