@@ -24,33 +24,27 @@ class MemoryManager:
         @param windowSize 每个会话保留的最大消息轮数（一问一答算2条）
         """
         self._histories: dict[str, InMemoryChatMessageHistory] = {}
-        # [Fix v10.8] 防御性配置解析，防止 NoneType * 2
-        base_size = windowSize or getattr(conf, 'memory_window_size', 10) or 10
+        # [v12.2] 严格控制窗口大小，防止上下文污染
+        base_size = windowSize or getattr(conf, 'memory_window_size', 4) or 4
         self._window_size = int(base_size) * 2
 
     def getHistory(self, sessionId: str) -> InMemoryChatMessageHistory:
         """
         获取指定会话的历史记录，不存在则自动创建
-
-        @param sessionId 会话标识（联系人名称或群名称）
-        @returns 该会话的消息历史对象
         """
         if sessionId not in self._histories:
             self._histories[sessionId] = InMemoryChatMessageHistory()
-            logger.info(f"创建新会话记忆: {sessionId}")
+            logger.info(f"创建新会话记忆: {sessionId} (Window: {self._window_size})")
         return self._histories[sessionId]
 
     def getMessages(self, sessionId: str) -> list[BaseMessage]:
         """
         获取指定会话的历史消息列表（已截断到窗口大小）
-
-        @param sessionId 会话标识
-        @returns 消息列表
         """
         history = self.getHistory(sessionId)
-        messages = history.messages
+        messages = list(history.messages)
 
-        # 滑动窗口：仅保留最近 N 条消息
+        # [v12.2] 增强滑动窗口：仅保留最近 N 条消息
         if len(messages) > self._window_size:
             trimmed = messages[-self._window_size:]
             history.clear()

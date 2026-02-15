@@ -68,6 +68,18 @@ class WechatListener:
                 # AddListenChat 前先确保窗口状态，减少超时概率
                 keepAliveWechatWindow(force_focus=False)
                 
+                # [FIX] 在尝试 AddListenChat 之前，先使用键盘流搜索激活聊天窗口
+                # 这可以确保联系人列表中的控件是可见的
+                from utils.wx_interaction import activate_chat_window
+                activation_success = activate_chat_window(name)
+                
+                if not activation_success:
+                    logger.warning(f"无法激活聊天窗口 [{name}]，跳过监听注册")
+                    continue
+                
+                # 给微信一点时间让UI稳定
+                time.sleep(1.0)
+                
                 # 尝试注册监听
                 self._wx.AddListenChat(who=name)
                 logger.info(f"已注册监听: {name}")
@@ -160,27 +172,16 @@ class WechatListener:
                         if msg_is_self is None:
                             msg_is_self = (msg_type == 'self')
                         
-                        # --- [v8.3] 深度回环保护 ---
-                        from wechat.sender import sender
-                        
-                        # 1. 拦截所有带 AI 签名的消息
-                        if conf.ai_signature and msg_content.endswith(conf.ai_signature):
-                            continue
-                            
                         # 2. [核心] 基于指纹的自发消息拦截
                         # 无论是否带签名，只要内容哈希与 AI 最近发送的一致，视为自发消息
                         if msg_is_self:
-                            if sender.is_recently_sent(who, msg_content):
-                                logger.debug(f"🛑 拦截指纹一致的自发消息: {msg_content[:20]}...")
-                                continue
+                            logger.debug(f"🛑 拦截自发消息 (is_self=True): {msg_content[:20]}...")
+                            continue
                             
-                            # 例外：允许主人通过"文件传输助手"发指令，但拦截明显的系统反馈
-                            if who == "文件传输助手":
-                                if msg_content.startswith("✅") or msg_content.startswith("❌") or msg_content.startswith("【系统"):
-                                    continue
-                            else:
-                                # 非文件传输助手的自发消息（例如在群里 AI 刚发出的段落），一律拦截
-                                continue
+                        # 3. [v12.2] 原子级指纹去重 (视网膜识别)
+                        if deduplicator.is_duplicate(who, msg_content, msg_type):
+                            logger.debug(f"🛑 拦截重复消息指纹: {msg_content[:20]}...")
+                            continue
 
                         # 拦截常见的系统级消息类型
                         if msg_type in ("time", "sys", "recall"):
