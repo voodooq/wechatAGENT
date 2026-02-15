@@ -46,44 +46,54 @@ def find_latest_voice_file(wx_root, scout_seconds=30):
         return None
     return fast_scan_voice_file(wx_root, scout_seconds)
 
-def fast_scan_voice_file(wx_root: str, scout_seconds: int = 15) -> str | None:
+def fast_scan_voice_file(anchor_path: str, scout_seconds: int = 15) -> str | None:
     """
-    [v11.0 物理解封] 使用原生 shell 命令极速定位最新语音文件。
-    绕过 Python os.walk 的缓慢遍历，直接利用 Windows dir 索引。
+    [v11.8 Precision-Hunter] 使用 Python 原生 os.walk 极速深度搜索。
+    针对 Voice 文件夹进行深度收割，校准锚点偏移。
     """
-    if not os.path.exists(wx_root):
-        logger.error(f"微信根目录不存在: {wx_root}")
+    if not os.path.exists(anchor_path):
+        logger.error(f"❌ 物理锚点不存在: {anchor_path}")
         return None
 
-    import subprocess
     import time
+    from pathlib import Path
     
-    logger.info(f"🔍 [Scanner] 启动物理解封雷达，目标: {wx_root}")
+    # 锚点校准：从 MsgAttach 或 FileStorage 锚点转向真正的 Voice 目录
+    anchor = Path(anchor_path)
+    if anchor.name == "MsgAttach":
+        voice_root = anchor.parent / "Voice"
+    elif anchor.name == "FileStorage":
+        voice_root = anchor / "Voice"
+    else:
+        # 如果锚点是 ID 目录或其他，尝试直接寻找
+        voice_root = anchor / "FileStorage" / "Voice"
     
-    # 锁定 FileStorage/Voice 路径模式
-    # 使用 dir /S /B /O-D 按照时间逆序快速列出所有 .silk 文件
+    if not voice_root.exists():
+        logger.warning(f"⚠️ [Scanner] 找不到 Voice 目录，尝试在锚点全量递归: {anchor_path}")
+        voice_root = anchor
+
+    logger.info(f"🔍 [Precision-Hunter] 启动深度捕获，根目录: {voice_root}")
+
+    latest_file = None
+    latest_time = 0
+    now = time.time()
+    
+    # [v11.8] 使用 os.walk 进行深度探测，因为语音文件深度不固定 (年份-月份/哈希/xxxx.silk)
     try:
-        # 强制 UTF-8 环境以支持中文路径探测
-        cmd = f'chcp 65001 >nul && dir "{wx_root}\\*FileStorage\\Voice\\*.silk" /S /B /O-D'
-        result = subprocess.check_output(cmd, shell=True, encoding='utf-8', errors='ignore')
-        
-        lines = [line.strip() for line in result.split("\n") if line.strip() and line.endswith(".silk")]
-        
-        if not lines:
-            logger.warning("未能在物理路径发现任何 .silk 文件")
-            return None
+        for root, _, files in os.walk(voice_root):
+            for f in files:
+                if f.lower().endswith(('.silk', '.aud')):
+                    f_path = os.path.join(root, f)
+                    mtime = os.path.getmtime(f_path)
+                    if mtime > latest_time and (now - mtime) < scout_seconds:
+                        latest_time = mtime
+                        latest_file = f_path
+                    
+        if latest_file:
+            logger.info(f"✅ [Precision-Hunter] 成功收割物理残留: {latest_file} ({int(now - latest_time)}s offset)")
+            return latest_file
             
-        # 验证最新文件的时间戳是否在范围内
-        latest_file = lines[0]
-        if os.path.exists(latest_file):
-            mtime = os.path.getmtime(latest_file)
-            if (time.time() - mtime) < scout_seconds:
-                logger.info(f"✅ [Scanner] 成功捕获物理残留: {latest_file} (offset: {int(time.time() - mtime)}s)")
-                return latest_file
-            else:
-                logger.debug(f"最新文件过于陈旧 ({int(time.time() - mtime)}s前)，忽略")
-                
     except Exception as e:
-        logger.debug(f"物理扫描过程提示: {e} (通常是因为目录下没有匹配文件)")
+        logger.debug(f"物理扫描过程提示: {e}")
         
     return None

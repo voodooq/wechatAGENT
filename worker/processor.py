@@ -86,15 +86,28 @@ class MessageProcessor:
                             # 2. 物理寻路雷达 (自愈降级)
                             if not save_path or not os.path.exists(save_path):
                                 logger.info("🎯 [Ghost-Hunter] 启动物理扇区扫描以捕获语音流...")
+                                from core.tools.wechat_locator import ultra_wechat_locator
                                 from utils.wechat_utils import fast_scan_voice_file
-                                # 优先使用我们之前实现的极速雷达，并在 10 秒窗口内锁定
-                                manual_path = fast_scan_voice_file(conf.wechat_files_root, scout_seconds=10)
+                                
+                                # 2.1 动态锚点识别
+                                anchor_path = ultra_wechat_locator.invoke({})
+                                if "❌" in anchor_path:
+                                    logger.error(f"无法定位物理锚点: {anchor_path}")
+                                    manual_path = None
+                                else:
+                                    # 2.2 极速雷达扫描
+                                    manual_path = fast_scan_voice_file(anchor_path, scout_seconds=10)
                                 
                                 if manual_path and os.path.exists(manual_path):
                                     logger.info(f"✅ [Ghost-Hunter] 成功锁定物理路径: {manual_path}")
+                                    
+                                    # [v11.8 Fix] 语音头部二进制自愈：修复微信 PC 版常见的 Missing magic number 问题
+                                    from core.tools.voice_healer import patch_silk_header
+                                    repaired_path = patch_silk_header(manual_path)
+                                    
                                     import shutil
-                                    dest_path = os.path.join(temp_dir, os.path.basename(manual_path))
-                                    shutil.copy2(manual_path, dest_path)
+                                    dest_path = os.path.join(temp_dir, os.path.basename(repaired_path))
+                                    shutil.copy2(repaired_path, dest_path)
                                     save_path = dest_path
                                 else:
                                     # 如果是 Master 线程必须报错，否则静默跳过
@@ -130,9 +143,24 @@ class MessageProcessor:
                                 res = recognize_speech_from_audio(save_path)
                                 
                                 if res.get("status") == "success":
-                                    user_input = res.get("recognized_text", "")
-                                    logger.info(f"语音识别成功: {user_input}")
-                                    sender.sendMessage(message.sender, f"👂 我听到了: \"{user_input}\"")
+                                    user_input_raw = res.get("recognized_text", "")
+                                    logger.info(f"语音识别成功: {user_input_raw}")
+                                    
+                                    # [v11.9 Empathy] 情感引擎分析
+                                    from core.tools.sentiment_engine import analyze_voice_sentiment
+                                    duration = 5.0
+                                    try:
+                                        import subprocess
+                                        cmd = f'ffprobe -i "{save_path}" -show_entries format=duration -v quiet -of csv="p=0"'
+                                        duration = float(subprocess.check_output(cmd, shell=True).strip() or 5.0)
+                                    except: pass
+                                    
+                                    sentiment_tag = analyze_voice_sentiment.invoke({"transcript": user_input_raw, "duration": duration})
+                                    # 注入情感上下文给大脑
+                                    message.content = f"{sentiment_tag}\n\n[语音内容]: {user_input_raw}"
+                                    
+                                    sender.sendMessage(message.sender, f"👂 我听到了: \"{user_input_raw}\"")
+                                    # 注意：后续的大脑处理逻辑会使用 message.content
                                 else:
                                     error_msg = res.get("message", "识别失败")
                                     logger.error(f"语音识别失败: {error_msg}")

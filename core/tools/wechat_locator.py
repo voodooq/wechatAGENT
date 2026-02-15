@@ -58,16 +58,22 @@ def ultra_wechat_locator() -> str:
         if not wx_root.exists():
             return "❌ 路径探测失败：未能找到微信存档根目录。"
 
-        # 寻找包含 FileStorage 的用户文件夹（排除 All Users）
-        user_dirs = [d for d in wx_root.iterdir() if d.is_dir() and d.name != "All Users" and (d / "FileStorage").exists()]
+        # 锁定具体的 ID 目录（锚点识别）
+        # 排除 All Users, Applet 等系统目录，寻找包含 FileStorage 的 ID 目录
+        user_dirs = [d for d in wx_root.iterdir() if d.is_dir() and d.name not in ["All Users", "Applet"] and (d / "FileStorage").exists()]
         if not user_dirs:
             return f"❌ 定位失败：在 {wx_root} 未发现活跃用户数据。"
 
-        # 锁定最近修改的用户目录
+        # 锁定最近修改的用户目录作为锚点
         active_user = max(user_dirs, key=lambda d: d.stat().st_mtime)
+        # 返回核心物理锚点：MsgAttach 目录
         target = active_user / "FileStorage" / "MsgAttach"
         
-        logger.info(f"🧬 [Omni-Path] v11.0 成功锁定: {target}")
+        # [v11.7 Evolution] 如果 MsgAttach 不存在，向上兜底到 FileStorage
+        if not target.exists():
+            target = active_user / "FileStorage"
+            
+        logger.info(f"🧬 [Precision-Anchor] v11.7 成功锁定锚点: {target}")
         return str(target.absolute())
 
     except Exception as e:
