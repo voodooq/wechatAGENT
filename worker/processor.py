@@ -160,6 +160,9 @@ class MessageProcessor:
                                     message.content = f"{sentiment_tag}\n\n[语音内容]: {user_input_raw}"
                                     
                                     sender.sendMessage(message.sender, f"👂 我听到了: \"{user_input_raw}\"")
+                                    # [v11.9] 增加微小缓冲防止 COM 竞争
+                                    import time
+                                    time.sleep(0.5)
                                     # 注意：后续的大脑处理逻辑会使用 message.content
                                 else:
                                     error_msg = res.get("message", "识别失败")

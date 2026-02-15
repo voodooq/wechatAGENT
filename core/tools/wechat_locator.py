@@ -73,7 +73,7 @@ def ultra_wechat_locator() -> str:
         if not target.exists():
             target = active_user / "FileStorage"
             
-        logger.info(f"🧬 [Precision-Anchor] v11.7 成功锁定锚点: {target}")
+        logger.info(f"🧬 [Precision-Anchor] v11.9 成功锁定锚点: {target}")
         return str(target.absolute())
 
     except Exception as e:

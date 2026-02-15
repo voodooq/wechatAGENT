@@ -36,8 +36,8 @@ def process_voice_message(voice_file_path=None, user_name="文件传输助手"):
                 logger.warning(f"未找到{user_name}的语音消息")
                 return "未找到语音消息文件，请确保已发送语音消息。", False
         
-        # 识别语音内容
-        from ...kernel.tools import recognize_speech_from_audio
+        # 识别语音内容 (使用绝对导入或从 tools.default 导入)
+        from tools.default import recognize_speech_from_audio
         recognition_result = recognize_speech_from_audio(audio_file_path=saved_path)
         
         if recognition_result.get("status") == "success":
