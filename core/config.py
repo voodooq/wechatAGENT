@@ -1,8 +1,10 @@
 import os
+print("--- [Config Trace] Starting execution ---")
 import winreg
 from pathlib import Path
 from typing import Optional, List
 from dotenv import load_dotenv
+
 
 class Config:
     """
@@ -36,8 +38,10 @@ class Config:
             for key, value in ConfigTemplate.__dict__.items():
                 if not key.startswith("_"):
                     setattr(self, key, value)
-        except ImportError:
-            pass
+        except ImportError as e:
+            print(f"❌ [Config] Failed to load ConfigTemplate: {e}")
+            # raise e # Optionally re-raise if critical
+
         
         # 3. 环境变量覆盖
         for key in dir(self):
@@ -142,3 +146,5 @@ class Config:
 
 # 创建全局配置实例
 conf = Config()
+PROJECT_ROOT = Config.PROJECT_ROOT
+
