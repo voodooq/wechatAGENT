@@ -113,9 +113,9 @@ def create_llm(temperature: float = None, max_output_tokens: int = None, model: 
     支持可选参数覆盖默认配置。
     """
     provider = getattr(conf, 'llm_provider', 'google').lower()
-    model_name = model or conf.MODEL_NAME
-    temp = temperature if temperature is not None else getattr(conf, 'TEMPERATURE', 0.2)
-    max_tokens = max_output_tokens if max_output_tokens is not None else getattr(conf, 'MAX_OUTPUT_TOKENS', 2048)
+    model_name = model or getattr(conf, 'model_name', 'gemini-2.0-flash')
+    temp = temperature if temperature is not None else getattr(conf, 'temperature', 0.2)
+    max_tokens = max_output_tokens if max_output_tokens is not None else getattr(conf, 'max_output_tokens', 2048)
 
     try:
         if provider == "google":
@@ -204,7 +204,7 @@ def createAgent() -> AgentExecutor:
         tools=tools,
         verbose=False,
         handle_parsing_errors=True,
-        max_iterations=getattr(conf, 'AGENT_MAX_ITERATIONS', 15),
+        max_iterations=getattr(conf, 'agent_max_iterations', 15) or 15,
         early_stopping_method="force",
     )
 
@@ -251,7 +251,7 @@ class RateLimiter:
 
 
 # 全局限流器实例
-_rate_limiter = RateLimiter(rpm=getattr(conf, 'GENAI_RPM', 15))
+_rate_limiter = RateLimiter(rpm=getattr(conf, 'genai_rpm', 15) or 15)
 
 
 async def safe_chat_invoke(agent_executor, input_data: dict, max_retries: int = 3) -> str:
