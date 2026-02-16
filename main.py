@@ -7,21 +7,23 @@ AI 智能助理 — 程序入口
 import sys
 import time
 import signal
-import nest_asyncio
-
-# [v7.2 Patch] 允许在异步事件循环中进行嵌套调用
-nest_asyncio.apply()
+# import nest_asyncio
+# nest_asyncio.apply()
 
 from core.config import conf
-
-# [v11.6 Evolution] 环境自愈催化剂：强制探测并注入全局 FFmpeg 路径
 try:
-    from core.env_init import setup_ffmpeg_environment
-    setup_ffmpeg_environment()
+    print(f"MAIN DIAGNOSTIC: conf.reply_delay_min = {getattr(conf, 'reply_delay_min', 'MISSING')}")
 except Exception as e:
-    print(f"环境初始化异常: {e}")
+    print(f"MAIN DIAGNOSTIC ERROR: {e}")
+
+# try:
+#     from core.env_init import setup_ffmpeg_environment
+    # setup_ffmpeg_environment()
+# except Exception as e:
+#     print(f"环境初始化异常: {e}")
 
 from utils.logger import logger
+
 from utils.stability import setupGlobalExceptionHandler
 from utils.self_test import get_self_test_report
 from wechat.listener import WechatListener
