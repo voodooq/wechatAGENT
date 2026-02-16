@@ -39,11 +39,15 @@ class Config:
                 if not key.startswith("_"):
                     setattr(self, key, value)
         except ImportError as e:
-            print(f"❌ [Config] Failed to load ConfigTemplate: {e}")
+            print(f"[Config] Failed to load ConfigTemplate: {e}")
             # raise e # Optionally re-raise if critical
 
-        
+        # Debug: 打印所有已加载的配置键
+        print(f"[Config] Loaded keys: {[k for k in self.__dict__ if not k.startswith('_')]}")
+
+
         # 3. 环境变量覆盖
+
         for key in dir(self):
             if not key.startswith("_"):
                 env_val = os.getenv(key.upper())
