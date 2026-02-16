@@ -121,19 +121,19 @@ def create_llm(temperature: float = None, max_output_tokens: int = None, model: 
         if provider == "google":
             return ChatGoogleGenerativeAI(
                 model=model_name,
-                google_api_key=conf.GOOGLE_API_KEY,
+                google_api_key=conf.google_api_key,
                 temperature=temp,
                 max_output_tokens=max_tokens,
                 timeout=60,
             )
         elif provider in ["openai", "deepseek", "openai-compatible"]:
-            key = conf.OPENAI_API_KEY if provider == "openai" else getattr(conf, 'DEEPSEEK_API_KEY', "")
+            key = conf.openai_api_key if provider == "openai" else getattr(conf, 'deepseek_api_key', "")
             base = getattr(conf, 'openai_api_base', "https://api.openai.com/v1") if provider == "openai" else getattr(conf, 'deepseek_api_base', "https://api.deepseek.com")
             
             # 特殊处理通用兼容模式
             if provider == "openai-compatible":
-                key = conf.OPENAI_API_KEY
-                base = conf.OPENAI_API_BASE
+                key = conf.openai_api_key
+                base = conf.openai_api_base
 
             return ChatOpenAI(
                 model=model_name,
@@ -146,7 +146,7 @@ def create_llm(temperature: float = None, max_output_tokens: int = None, model: 
         elif provider == "anthropic":
             return ChatAnthropic(
                 model=model_name,
-                anthropic_api_key=conf.ANTHROPIC_API_KEY,
+                anthropic_api_key=conf.anthropic_api_key,
                 temperature=temp,
                 max_tokens=max_tokens,
                 timeout=60,
@@ -157,7 +157,7 @@ def create_llm(temperature: float = None, max_output_tokens: int = None, model: 
     # 兜底方案
     return ChatGoogleGenerativeAI(
         model="gemini-2.0-flash",
-        google_api_key=conf.GOOGLE_API_KEY,
+        google_api_key=conf.google_api_key,
         temperature=0.2,
         max_output_tokens=2048,
         timeout=60,
