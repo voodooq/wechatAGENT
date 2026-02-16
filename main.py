@@ -24,12 +24,22 @@ except Exception as e:
 
 from utils.logger import logger
 
-# from utils.stability import setupGlobalExceptionHandler
+from utils.stability import setupGlobalExceptionHandler
 # from utils.self_test import get_self_test_report
 # from wechat.listener import WechatListener
 # from wechat.sender import sender
 # from worker.processor import MessageProcessor
 # from scheduler.daily_summary import DailySummaryScheduler
+
+
+def main():
+    # Setup exception handler
+    setupGlobalExceptionHandler()
+    pass
+
+if __name__ == "__main__":
+    main()
+
 
 
 
