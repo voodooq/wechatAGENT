@@ -12,6 +12,8 @@ import nest_asyncio
 # [v7.2 Patch] 允许在异步事件循环中进行嵌套调用
 nest_asyncio.apply()
 
+from core.config import conf
+
 # [v11.6 Evolution] 环境自愈催化剂：强制探测并注入全局 FFmpeg 路径
 try:
     from core.env_init import setup_ffmpeg_environment
@@ -19,8 +21,8 @@ try:
 except Exception as e:
     print(f"环境初始化异常: {e}")
 
-from core.config import conf
 from utils.logger import logger
+
 from utils.stability import setupGlobalExceptionHandler
 from utils.self_test import get_self_test_report
 from wechat.listener import WechatListener
@@ -36,12 +38,12 @@ scheduler = DailySummaryScheduler()
 
 
 def _printBanner():
-    """打印启动横幅 (v10.0 Evolution)"""
+    """打印启动横幅 (v13.0 Evolution)"""
     banner = """
 ╔══════════════════════════════════════════════╗
-║           🤖 IronSentinel v10.0              ║
+║           🤖 IronSentinel v13.0              ║
 ║                                              ║
-║   开源进化 | 自我维护 | 物理隔离 | 守护运行   ║
+║   开源进化 | 自我维护 | 物理隔离 | 守护运行  ║
 ╚══════════════════════════════════════════════╝
     """
     print(banner)

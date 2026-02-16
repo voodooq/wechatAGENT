@@ -23,8 +23,12 @@ class Config:
         return cls._instance
 
     def _load(self):
+        # 0. 初始化基础路径
+        self.project_root = self.PROJECT_ROOT
+
         # 1. 加载环境变量
-        load_dotenv(dotenv_path=self.PROJECT_ROOT / ".env", override=True)
+        load_dotenv(dotenv_path=self.project_root / ".env", override=True)
+
         
         # 2. 从模板加载默认值
         try:
@@ -135,3 +139,6 @@ class Config:
         if name.startswith("_"):
             raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
         return None
+
+# 创建全局配置实例
+conf = Config()
