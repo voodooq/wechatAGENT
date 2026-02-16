@@ -22,13 +22,17 @@ except Exception as e:
     print(f"环境初始化异常: {e}")
 
 from utils.logger import logger
-
 from utils.stability import setupGlobalExceptionHandler
 from utils.self_test import get_self_test_report
 from wechat.listener import WechatListener
 from wechat.sender import sender
 from worker.processor import MessageProcessor
 from scheduler.daily_summary import DailySummaryScheduler
+
+
+
+
+
 
 
 # 全局组件实例
