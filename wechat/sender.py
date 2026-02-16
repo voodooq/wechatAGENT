@@ -3,7 +3,8 @@ import random
 import threading
 import collections
 import hashlib
-import uiautomation as auto
+
+
 
 from core.config import conf
 from utils.logger import logger

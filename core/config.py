@@ -1,6 +1,6 @@
 import os
-print("--- [Config Trace] Starting execution ---")
 import winreg
+
 from pathlib import Path
 from typing import Optional, List
 from dotenv import load_dotenv
@@ -38,13 +38,8 @@ class Config:
             for key, value in ConfigTemplate.__dict__.items():
                 if not key.startswith("_"):
                     setattr(self, key, value)
-        except ImportError as e:
-            print(f"[Config] Failed to load ConfigTemplate: {e}")
-            # raise e # Optionally re-raise if critical
-
-        # Debug: 打印所有已加载的配置键
-        print(f"[Config] Loaded keys: {[k for k in self.__dict__ if not k.startswith('_')]}")
-
+        except ImportError:
+            pass
 
         # 3. 环境变量覆盖
 
@@ -151,4 +146,5 @@ class Config:
 # 创建全局配置实例
 conf = Config()
 PROJECT_ROOT = Config.PROJECT_ROOT
+VOICE_MESSAGES_DIR = PROJECT_ROOT / "temp" / "voice"
 
