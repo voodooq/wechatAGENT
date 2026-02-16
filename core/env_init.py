@@ -2,13 +2,13 @@ import os
 import sys
 import shutil
 from pathlib import Path
-from utils.logger import logger
-
 def setup_ffmpeg_environment():
     """
     [环境催化剂] 自动定位 FFmpeg 并注入当前进程环境变量。
     优先顺序：项目 bin 目录 > 系统 PATH > 常见安装路径。
     """
+    from utils.logger import logger
+
     # 1. 定义潜在的藏身之处
     project_root = Path(os.getcwd())
     potential_bins = [
