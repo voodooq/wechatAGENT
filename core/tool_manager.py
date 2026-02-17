@@ -24,12 +24,16 @@ class ToolManager:
         from core.tools.im_locator import locate_im_voice, get_supported_im_types
         from core.tools.wechat_account_manager import list_wechat_accounts, identify_current_account, switch_wechat_account, refresh_account_list
         from core.tools.enhanced_wechat_locator import enhanced_wechat_locator, get_current_wechat_context
+        from core.tools.auto_voice_processor import auto_process_latest_voice, monitor_voice_continuously, get_voice_system_status
+        from tools.one_click_voice import one_click_voice_process, quick_voice_check
         from tools.smart_reply_manager import configure_smart_reply, get_reply_statistics, clear_reply_history, test_reply_uniqueness
         all_tools.extend([
             evolve_code, sync_to_github, request_hot_reload, report_evolution_progress, 
             ultra_wechat_locator, locate_im_voice, get_supported_im_types,
             list_wechat_accounts, identify_current_account, switch_wechat_account, refresh_account_list,
             enhanced_wechat_locator, get_current_wechat_context,
+            auto_process_latest_voice, monitor_voice_continuously, get_voice_system_status,
+            one_click_voice_process, quick_voice_check,
             configure_smart_reply, get_reply_statistics, clear_reply_history, test_reply_uniqueness
         ])
 
