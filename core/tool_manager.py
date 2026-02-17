@@ -26,6 +26,7 @@ class ToolManager:
         from core.tools.enhanced_wechat_locator import enhanced_wechat_locator, get_current_wechat_context
         from core.tools.auto_voice_processor import auto_process_latest_voice, monitor_voice_continuously, get_voice_system_status
         from tools.one_click_voice import one_click_voice_process, quick_voice_check
+        from tools.binary_manager import check_binary_components, initialize_binary_environment
         from tools.smart_reply_manager import configure_smart_reply, get_reply_statistics, clear_reply_history, test_reply_uniqueness
         all_tools.extend([
             evolve_code, sync_to_github, request_hot_reload, report_evolution_progress, 
@@ -34,6 +35,7 @@ class ToolManager:
             enhanced_wechat_locator, get_current_wechat_context,
             auto_process_latest_voice, monitor_voice_continuously, get_voice_system_status,
             one_click_voice_process, quick_voice_check,
+            check_binary_components, initialize_binary_environment,
             configure_smart_reply, get_reply_statistics, clear_reply_history, test_reply_uniqueness
         ])
 

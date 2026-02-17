@@ -1,38 +1,40 @@
 import os
 import sys
+import shutil
 from pathlib import Path
 
-# 添加项目根目录到路径
-sys.path.append(os.getcwd())
-
-from core.tools.binary_manager import download_and_verify_binary
-from utils.logger import logger
-
-def initialize_environment():
-    """
-    [初始化] 一键建立 IronSentinel 运行环境。
-    """
-    logger.info("🚀 开始 IronSentinel v11.0 环境初始化自愈...")
+def ensure_binary_components():
+    """确保所有必需的二进制组件都存在"""
+    bin_dir = Path("tools/bin")
+    bin_dir.mkdir(exist_ok=True)
     
-    binaries = ["silk_v3_decoder.exe", "silk_v3_encoder.exe", "ffmpeg.exe"]
+    # 必需的二进制文件列表
+    required_binaries = {
+        "silk_v3_decoder.exe": "微信语音解码核心组件"
+    }
     
-    success_count = 0
-    for bin_name in binaries:
-        try:
-            # 调用 binary_manager 工具进行下载和校验
-            result = download_and_verify_binary.invoke(bin_name)
-            if "✅" in result:
-                logger.info(f"   {result}")
-                success_count += 1
-            else:
-                logger.error(f"   {result}")
-        except Exception as e:
-            logger.error(f"   ❌ 初始化 {bin_name} 时发生异常: {e}")
+    for binary_name, description in required_binaries.items():
+        binary_path = bin_dir / binary_name
+        
+        if not binary_path.exists():
+            print(f"⚠️  {description} 缺失: {binary_name}")
+            print(f"   请从项目仓库下载或手动放置到 {bin_dir} 目录")
+            return False
+        else:
+            print(f"✅ {description} 已就绪: {binary_name}")
+    
+    return True
 
-    if success_count == len(binaries):
-        logger.info("🎉 所有核心组件已就绪。")
-    else:
-        logger.warning(f"⚠️ 环境初始化部分成功 ({success_count}/{len(binaries)})，请检查网络连接。")
+def main():
+    """初始化环境"""
+    print("🔧 初始化运行环境...")
+    
+    # 确保二进制组件
+    if not ensure_binary_components():
+        print("❌ 环境初始化失败：缺少必需的二进制组件")
+        sys.exit(1)
+    
+    print("✅ 环境初始化完成！")
 
 if __name__ == "__main__":
-    initialize_environment()
+    main()

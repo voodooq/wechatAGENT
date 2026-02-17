@@ -63,6 +63,42 @@ wechatAGENT/
 
 ## 🚀 快速开始
 
+### 1. 环境准备
+```bash
+# 克隆仓库
+git clone https://github.com/your-username/wechatAGENT.git
+cd wechatAGENT
+
+# 创建虚拟环境（推荐使用conda）
+conda create -n wechat-ai python=3.10
+conda activate wechat-ai
+
+# 安装依赖
+pip install -r requirements-lock.txt
+```
+
+### 2. 配置环境变量
+```bash
+# 复制配置模板
+cp .env.example .env
+
+# 编辑 .env 文件，填入您的 API Keys
+# 支持 Google、OpenAI、Anthropic、DeepSeek、Qwen 等多种 AI 模型
+```
+
+### 3. 初始化二进制组件
+```bash
+# 运行初始化脚本（确保silk_v3_decoder.exe等组件可用）
+python tools/initialize_env.py
+```
+
+> **注意**: [silk_v3_decoder.exe](file://e:\work\wechatAGENT\tools\bin\silk_v3_decoder.exe) 是微信语音解码的核心组件，已包含在仓库中。如果文件缺失，请确保从 Git 仓库完整克隆，或手动下载放置到 `tools/bin/` 目录。
+
+### 4. 启动主程序
+```bash
+python main.py
+```
+
 ### 方法一：使用启动脚本 (推荐)
 1. 双击运行 `start.bat`
 2. 脚本会自动：
