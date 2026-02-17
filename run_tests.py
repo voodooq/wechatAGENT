@@ -22,7 +22,8 @@ def run_all_tests():
         'tests.test_deduplicator',
         'tests.test_auto_voice_processor', 
         'tests.test_wechat_account_manager',
-        'tests.test_one_click_voice'
+        'tests.test_one_click_voice',
+        'tests.test_binary_manager'
     ]
     
     for module in test_modules:
