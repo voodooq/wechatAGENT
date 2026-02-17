@@ -131,7 +131,7 @@ class MessageProcessor:
                                 if save_path.lower().endswith(".silk"):
                                     logger.info("🧬 [v10.7] 检测到加密语音流，启动深度解码器...")
                                     from core.tools.voice_decoder import decode_silk_to_wav
-                                    decoded_path = decode_silk_to_wav.invoke(save_path)
+                                    decoded_path = decode_silk_to_wav.invoke({"silk_path": save_path})
                                     
                                     if "❌" in decoded_path:
                                         logger.error(f"语音解码失败: {decoded_path}")
@@ -140,7 +140,7 @@ class MessageProcessor:
 
                                 # 3. 调用工具进行识别
                                 from tools.default import recognize_speech_from_audio
-                                res = recognize_speech_from_audio(save_path)
+                                res = recognize_speech_from_audio.invoke({"audio_file_path": save_path})
                                 
                                 if res.get("status") == "success":
                                     user_input_raw = res.get("recognized_text", "")

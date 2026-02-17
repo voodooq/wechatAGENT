@@ -56,7 +56,7 @@ def process_im_voice(im_type: str, scout_seconds: int = 30, temp_dir: str = None
             
         # 6. 语音识别
         from tools.default import recognize_speech_from_audio
-        recognition_result = recognize_speech_from_audio(dest_path)
+        recognition_result = recognize_speech_from_audio.invoke({"audio_file_path": dest_path})
         
         if recognition_result.get("status") == "success":
             # 7. 情感分析

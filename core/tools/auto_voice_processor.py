@@ -179,9 +179,9 @@ class AutoVoiceProcessor:
                 if "❌" not in decoded_result:
                     final_audio_path = decoded_result
             
-            # 5. 语音识别
+            # 5. 调用工具进行识别
             from tools.default import recognize_speech_from_audio
-            recognition_result = recognize_speech_from_audio(final_audio_path)
+            recognition_result = recognize_speech_from_audio.invoke({"audio_file_path": final_audio_path})
             
             if recognition_result.get("status") != "success":
                 return {
