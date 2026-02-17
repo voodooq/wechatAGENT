@@ -89,19 +89,6 @@ def getDailyLogger() -> logging.Logger:
     return logger
 
 
-# 全局 Logger 代理 (v10.1 Lazy Initialization)
-class LoggerProxy:
-    def __init__(self, factory, name):
-        self._factory = factory
-        self._name = name
-        self._instance = None
-
-    def __getattr__(self, name):
-        if self._instance is None:
-            self._instance = self._factory(self._name)
-        return getattr(self._instance, name)
-
-# 导出代理实例，避免在导入时立即触发 setupLogger
-logger = LoggerProxy(setupLogger, "ai_assistant")
-daily_logger = LoggerProxy(getDailyLogger, "daily_messages")
-
+# 全局 Logger 实例 (直接初始化)
+logger = setupLogger("ai_assistant")
+daily_logger = getDailyLogger()

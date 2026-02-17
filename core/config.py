@@ -47,10 +47,16 @@ class Config:
             if not key.startswith("_"):
                 env_val = os.getenv(key.upper())
                 if env_val is not None:
-                    setattr(self, key, env_val)
+                    # 特殊处理 whitelist 字符串到列表的转换
+                    if key == 'whitelist':
+                        # 将逗号分隔的字符串转换为列表
+                        setattr(self, key, [item.strip() for item in env_val.split(',') if item.strip()])
+                    else:
+                        setattr(self, key, env_val)
         
         # 4. 特殊路径处理
         self.db_full_path = self.PROJECT_ROOT / getattr(self, 'db_path', 'data/work.db')
+        self.log_full_dir = self.PROJECT_ROOT / "logs"
         
         # 5. 微信路径探测
         self.wechat_files_root = self._detect_wechat_path()
@@ -142,6 +148,11 @@ class Config:
         if name.startswith("_"):
             raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
         return None
+
+    def validate(self):
+        """验证配置"""
+        from config.validator import validate_configuration
+        return validate_configuration(self)
 
 # 创建全局配置实例
 conf = Config()

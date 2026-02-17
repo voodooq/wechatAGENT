@@ -5,80 +5,132 @@ import os
 from utils.logger import logger
 from core.config import conf
 
+# 导入实际的搜索工具实现
+from tools.web_search_tool import searchWeb, tavilySearch
+
 def queryDatabase(query: str) -> dict:
-    # ... (保持原有代码不变)
+    """
+    执行数据库查询，返回查询结果
+    """
     pass
 
 def searchWeb(query: str) -> dict:
-    # ... (保持原有代码不变)
-    pass
+    """
+    执行网页搜索，返回搜索结果
+    """
+    try:
+        # 调用实际的异步搜索工具
+        import asyncio
+        result = asyncio.run(searchWeb(query))
+        return {"status": "success", "result": result}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 def tavilySearch(query: str) -> dict:
-    # ... (保持原有代码不变)
-    pass
+    """
+    使用 Tavily API 执行深度搜索
+    """
+    try:
+        import asyncio
+        result = asyncio.run(tavilySearch(query))
+        return {"status": "success", "result": result}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 def read_webpage_content(url: str) -> dict:
-    # ... (保持原有代码不变)
+    """
+    读取网页内容
+    """
     pass
 
 def install_python_library(library_name: str) -> dict:
-    # ... (保持原有代码不变)
+    """
+    安装 Python 库
+    """
     pass
 
 def install_windows_software(software_name: str) -> dict:
-    # ... (保持原有代码不变)
+    """
+    安装 Windows 软件
+    """
     pass
 
 def close_browser() -> dict:
-    # ... (保持原有代码不变)
+    """
+    关闭浏览器
+    """
     pass
 
 def browseWebpage(url: str, actions: Optional[list[dict]] = None) -> dict:
-    # ... (保持原有代码不变)
+    """
+    浏览网页并执行操作
+    """
     pass
 
 def ask_for_confirmation(reason: str, user_name: str) -> dict:
-    # ... (保持原有代码不变)
+    """
+    请求用户确认
+    """
     pass
 
 def execute_system_command(command: str, user_name: str) -> dict:
-    # ... (保持原有代码不变)
+    """
+    执行系统命令
+    """
     pass
 
 def manage_wechat_window(action: str) -> dict:
-    # ... (保持原有代码不变)
+    """
+    管理微信窗口
+    """
     pass
 
 def capture_and_send_screenshot(user_name: str) -> dict:
-    # ... (保持原有代码不变)
+    """
+    捕获并发送截图
+    """
     pass
 
 def read_and_analyze_file(file_path: str, query: Optional[str] = None) -> dict:
-    # ... (保持原有代码不变)
+    """
+    读取并分析文件
+    """
     pass
 
 def verify_state(check_type: str, target: str) -> dict:
-    # ... (保持原有代码不变)
+    """
+    验证状态
+    """
     pass
 
 def evolve_code(file_path: str, code: str, reason: str) -> dict:
-    # ... (保持原有代码不变)
+    """
+    进化代码
+    """
     pass
 
 def sync_to_github(commit_msg: str) -> dict:
-    # ... (保持原有代码不变)
+    """
+    同步到 GitHub
+    """
     pass
 
 def request_hot_reload(reason: Optional[str] = None, report_to: Optional[str] = None) -> dict:
-    # ... (保持原有代码不变)
+    """
+    请求热重载
+    """
     pass
 
 def isolate_self(reason: str) -> dict:
-    # ... (保持原有代码不变)
+    """
+    隔离自己
+    """
     pass
 
 def read_pdf_invoice(file_path: str) -> dict:
-    # ... (保持原有代码不变)
+    """
+    读取 PDF 发票
+    """
     pass
 
 @tool

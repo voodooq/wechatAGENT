@@ -98,7 +98,8 @@ class SmartResponder:
         context_similarity = self._calculate_similarity(content, context)
         
         # 如果回复与上下文完全无关，可能是机械回复
-        if context_similarity < 0.1:
+        # 降低阈值以避免误拦截（从0.1降低到0.05）
+        if context_similarity < 0.05:
             return False, "回复与上下文关联度过低"
             
         return True, "上下文检查通过"

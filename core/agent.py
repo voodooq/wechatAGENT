@@ -79,7 +79,8 @@ async def processMessage(userInput: str, sender: str, role_level: int = 1) -> Op
     try:
         # 获取配置
         provider = getattr(conf, 'llm_provider', 'google')
-        model_name = getattr(conf, 'llm_model', 'gemini-1.5-flash')
+        # 修复：使用 model_name 而不是 llm_model
+        model_name = getattr(conf, 'model_name', 'gemini-1.5-flash')
         temp = getattr(conf, 'temperature', 0.7)
         max_tokens = getattr(conf, 'max_tokens', 4096)
         
@@ -88,16 +89,42 @@ async def processMessage(userInput: str, sender: str, role_level: int = 1) -> Op
         
         # 获取可用工具
         tool_manager = ToolManager()
-        tools = tool_manager.get_all_tools()
+        tools = tool_manager.load_all_tools()
         
         # 构建系统提示
         system_prompt = _build_system_prompt(sender, role_level)
         
         # 创建 ReAct Agent
+        # ReAct 提示词模板
+        react_instruction = """
+TOOLS:
+------
+You have access to the following tools:
+
+{tools}
+
+To use a tool, please use the following format:
+
+```
+Thought: Do I need to use a tool? Yes
+Action: the action to take, should be one of [{tool_names}]
+Action Input: the input to the action
+Observation: the result of the action
+```
+
+When you have a response to say to the Human, or if you do not need to use a tool, you MUST use the format:
+
+```
+Thought: Do I need to use a tool? No
+Final Answer: [your response here]
+```
+"""
+        full_system_prompt = system_prompt + "\n\n" + react_instruction
+
         prompt = ChatPromptTemplate.from_messages([
-            SystemMessage(content=system_prompt),
+            ("system", full_system_prompt),
             MessagesPlaceholder(variable_name="chat_history"),
-            HumanMessage(content="{input}"),
+            ("human", "{input}"),
             MessagesPlaceholder(variable_name="agent_scratchpad"),
         ])
         
@@ -135,6 +162,21 @@ def _build_system_prompt(sender: str, role_level: int) -> str:
 当前用户: {sender}
 用户权限级别: {role_level}
 
+## 重要搜索规则
+
+### 网站限定处理
+- 当用户明确指定在某个网站搜索时（如"在xxx网站上查找"、"从xxx平台获取"等），你必须只在该指定网站内进行搜索
+- 构造搜索查询时，使用 "site:域名 关键词" 的格式来限定搜索范围
+- 例如：用户说"在中国击剑协会官网查找比赛信息"，你应该构造查询 "site:fencing.sport.org.cn 比赛信息"
+
+### 时间参数处理  
+- 年份未指定时，默认使用当前年份（2026年）
+- 月份未指定时，默认使用当前月份（2月）
+- 日期未指定时，默认使用当天日期（17日）
+- 在构造搜索查询时，自动补充完整的时间信息
+- 例如：用户说"查找3月份的比赛"，你应该理解为"2026年3月的比赛"
+
+### 工具使用规范
 你可以使用以下工具来帮助用户：
 - 微信相关操作（发送消息、处理语音等）
 - 网络搜索和信息获取
@@ -142,6 +184,31 @@ def _build_system_prompt(sender: str, role_level: int) -> str:
 - 系统管理和环境配置
 - 语音识别和文本转语音
 
-请根据用户的需求选择合适的工具，并提供清晰、准确的回答。"""
+### 回复要求
+- 提供清晰、准确、有用的回答
+- 如果搜索结果不相关或不足，请明确告知用户
+- 避免猜测或编造信息
+
+请严格遵守以上规则，确保搜索结果的准确性和相关性。"""
     
     return base_prompt.format(sender=sender, role_level=role_level)
+
+
+def create_llm(temperature: float = 0.7, max_tokens: int = 4096):
+    """
+    创建 LLM 实例用于日常摘要生成
+    
+    Args:
+        temperature: 温度参数
+        max_tokens: 最大输出令牌数
+        
+    Returns:
+        配置好的 LLM 实例
+    """
+    from core.config import conf
+    
+    provider = getattr(conf, 'llm_provider', 'google')
+    # 修复：使用 model_name 而不是 llm_model
+    model_name = getattr(conf, 'model_name', 'gemini-1.5-flash')
+    
+    return get_chat_model(provider, model_name, conf, temperature, max_tokens)

@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Optional
 
 from core.config import conf
+from core.deduplicator import deduplicator
 from utils.logger import logger, daily_logger
 from utils.stability import retryOnFailure, keepAliveWechatWindow
 from utils.ui_lock import ui_lock
@@ -173,10 +174,15 @@ class WechatListener:
                             msg_is_self = (msg_type == 'self')
                         
                         # 2. [核心] 基于指纹的自发消息拦截
-                        # 无论是否带签名，只要内容哈希与 AI 最近发送的一致，视为自发消息
-                        if msg_is_self:
-                            logger.debug(f"🛑 拦截自发消息 (is_self=True): {msg_content[:20]}...")
+                        # 只有当消息包含AI签名时才视为AI自发消息进行拦截
+                        ai_signature = getattr(conf, 'ai_signature', ' [IronSentinel v10.0]')
+                        
+                        if msg_is_self and ai_signature in msg_content:
+                            logger.debug(f"🛑 拦截AI自发消息 (包含签名): {msg_content[:20]}...")
                             continue
+                        elif msg_is_self:
+                            # 这是用户自己发送的消息，不应该拦截
+                            logger.debug(f"👤 用户自发消息 (无AI签名): {msg_content[:20]}...")
                             
                         # 3. [v12.2] 原子级指纹去重 (视网膜识别)
                         if deduplicator.is_duplicate(who, msg_content, msg_type):

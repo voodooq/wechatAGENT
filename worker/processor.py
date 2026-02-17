@@ -217,11 +217,11 @@ class MessageProcessor:
                             should_skip_text = tts_to_chat and is_voice_input
                             
                             if not should_skip_text:
-                                # 传递原始消息作为上下文
+                                # 传递原始用户输入作为上下文（而不是完整消息内容）
                                 sender.sendMessage(
                                     receiver=message.sender,
                                     content=reply,
-                                    context=message.content  # 传递上下文用于智能去重
+                                    context=user_input  # 使用处理后的用户输入作为上下文
                                 )
                                 logger.info(f"✅ 文本回复已发送给 [{message.sender}]")
                             else:

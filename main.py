@@ -85,6 +85,8 @@ def _gracefulShutdown(signum, frame):
 
 import json
 import os
+import time
+from datetime import datetime, timedelta
 
 def _checkEvolutionReports():
     """检查并发送演化完成报告"""
@@ -115,6 +117,54 @@ def _checkEvolutionReports():
             os.remove(pending_file)
         except Exception as e:
             logger.error(f"处理演化汇报失败: {e}")
+            # 即使失败也清理文件，防止无限重试
+            if os.path.exists(pending_file):
+                os.remove(pending_file)
+
+def _should_send_self_test_report() -> bool:
+    """
+    判断是否应该发送自检报告
+    
+    规则：
+    1. 如果从未发送过自检报告，返回 True
+    2. 如果上次发送时间超过 24 小时，返回 True  
+    3. 否则返回 False（避免重复发送）
+    
+    使用 audit_logs 表中的记录来判断
+    """
+    try:
+        from core.audit import audit_logger
+        from datetime import datetime, timedelta
+        
+        # 查询最近的自检报告记录
+        with audit_logger._get_db_conn() as conn:
+            cursor = conn.cursor()
+            # 查找包含自检报告关键词的记录
+            cursor.execute(
+                "SELECT timestamp FROM audit_logs WHERE command LIKE '%自检报告%' AND status = 'SUCCESS' ORDER BY timestamp DESC LIMIT 1"
+            )
+            result = cursor.fetchone()
+            
+            if result is None:
+                # 从未发送过自检报告
+                return True
+                
+            # 解析时间戳
+            last_timestamp_str = result[0]
+            # SQLite 时间戳格式: YYYY-MM-DD HH:MM:SS
+            last_timestamp = datetime.strptime(last_timestamp_str, "%Y-%m-%d %H:%M:%S")
+            
+            # 计算时间差
+            now = datetime.now()
+            time_diff = now - last_timestamp
+            
+            # 如果超过 24 小时，重新发送
+            return time_diff > timedelta(hours=24)
+            
+    except Exception as e:
+        logger.warning(f"检查自检报告发送状态时出错: {e}")
+        # 出错时保守地允许发送
+        return True
 
 def main():
     """程序主入口"""
@@ -157,12 +207,16 @@ def main():
         logger.info("=" * 50)
         logger.info("✅ 所有模块启动完成，等待消息...")
         
-        # 1. 发送常规自检报告
+        # 1. 发送常规自检报告（仅在需要时）
         try:
-            time.sleep(3) # 给微信窗口一点初始化时间
-            report = get_self_test_report()
-            sender.sendMessage(conf.master_remark, report)
-            logger.info(f"🚀 已向主人 [{conf.master_remark}] 发送启动自检报告")
+            # 检查是否需要发送自检报告
+            if _should_send_self_test_report():
+                time.sleep(3) # 给微信窗口一点初始化时间
+                report = get_self_test_report()
+                sender.sendMessage(conf.master_remark, report)
+                logger.info(f"🚀 已向主人 [{conf.master_remark}] 发送启动自检报告")
+            else:
+                logger.info("📋 跳过自检报告发送（最近已发送过）")
         except Exception as e:
             logger.error(f"发送自检报告失败: {e}")
 
