@@ -10,13 +10,14 @@ from typing import Optional, List
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder, SystemMessagePromptTemplate
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain.agents import create_react_agent, AgentExecutor
 from langchain.tools import Tool
 from core.tool_manager import ToolManager
 from core.config import conf
 from utils.logger import logger
+
 
 
 def get_chat_model(provider, model_name, conf, temp=0.7, max_tokens=4096):
@@ -121,8 +122,9 @@ Final Answer: [your response here]
 """
         full_system_prompt = system_prompt + "\n\n" + react_instruction
 
+
         prompt = ChatPromptTemplate.from_messages([
-            ("system", full_system_prompt),
+            SystemMessagePromptTemplate.from_template(full_system_prompt),
             MessagesPlaceholder(variable_name="chat_history"),
             ("human", "{input}"),
             MessagesPlaceholder(variable_name="agent_scratchpad"),
