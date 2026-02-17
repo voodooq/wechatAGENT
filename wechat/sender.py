@@ -1,6 +1,7 @@
 import time
 import random
 import os
+<<<<<<< HEAD
 import threading
 import collections
 import hashlib
@@ -8,6 +9,12 @@ from typing import Optional
 from threading import local, Lock
 from pathlib import Path
 from core.config import conf
+=======
+from typing import Optional
+from threading import local, Lock
+from pathlib import Path
+from utils.config import conf
+>>>>>>> 348415b49594ef4d594f68f988986b6ca6ebd0fe
 from utils.logger import logger
 from utils.stability import retryOnFailure, keepAliveWechatWindow
 from utils.ui_lock import ui_lock
