@@ -7,7 +7,6 @@ LangChain Agent 核心
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
-from langchain_community.chat_models import ChatQwen
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 
@@ -41,14 +40,6 @@ def get_chat_model(provider, model_name, conf, temp=0.7, max_tokens=4096):
         return ChatAnthropic(
             model=model_name,
             anthropic_api_key=conf.anthropic_api_key,
-            temperature=temp,
-            max_tokens=max_tokens,
-            timeout=60,
-        )
-    elif provider == "qwen":
-        return ChatQwen(
-            model=model_name,
-            qwen_api_key=conf.qwen_api_key,
             temperature=temp,
             max_tokens=max_tokens,
             timeout=60,
