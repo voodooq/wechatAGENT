@@ -1,12 +1,10 @@
 import time
 import random
-import threading
-import collections
-import hashlib
-
-
-
-from core.config import conf
+import os
+from typing import Optional
+from threading import local, Lock
+from pathlib import Path
+from core.config import conf  # 修复这行，从core.config导入而不是utils.config
 from utils.logger import logger
 from utils.stability import retryOnFailure, keepAliveWechatWindow
 from utils.ui_lock import ui_lock
