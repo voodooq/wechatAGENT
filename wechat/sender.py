@@ -90,10 +90,24 @@ class WechatSender:
         return True
 
     @retryOnFailure(maxRetries=3, delay=2.0)
-    def sendMessage(self, receiver: str, content: str) -> None:
+    def sendMessage(self, receiver: str, content: str, context: Optional[str] = None) -> None:
         """
-        向指定联系人发送消息
+        向指定联系人发送消息（智能版本）
+        
+        Args:
+            receiver: 接收者
+            content: 消息内容
+            context: 上下文信息（用于智能去重）
         """
+        # 智能回复检查
+        from core.smart_responder import smart_responder
+        should_send, reason = smart_responder.should_send_reply(receiver, content, context)
+        
+        if not should_send:
+            logger.info(f"🚫 智能拦截重复回复 [{receiver}]: {reason}")
+            logger.info(f"原计划发送内容: {content[:50]}...")
+            return
+            
         self._ensureWechat()
         
         # 自动追加 AI 签名，防止回环
@@ -134,7 +148,8 @@ class WechatSender:
                     time.sleep(0.5)
                     self._record_sent(receiver, content)
                     wx.SendMsg(msg=content, who=receiver)
-                    logger.info(f"已发送消息给 [{receiver}]，长度: {len(content)}")
+                    logger.info(f"✅ 智能回复已发送给 [{receiver}]，长度: {len(content)}")
+                    logger.info(f"发送原因: {reason}")
                     time.sleep(1.0)
                 
                 # [Fix v10.2.7] 增强缓和 COM 冲突：在 lock 内多留一点“冷却”时间，确保 UI 事件循环清空

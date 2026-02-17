@@ -20,7 +20,7 @@ def ultra_wechat_locator() -> str:
         try:
             with winreg.OpenKey(winreg.HKEY_CURRENT_USER, reg_path) as key:
                 storage_path, _ = winreg.QueryValueEx(key, "FileSavePath")
-        except Exception as e:
+        except (OSError, FileNotFoundError, PermissionError) as e:
             logger.warning(f"注册表读取失败: {e}")
 
         # 2. 解析 MyDocuments: 占位符 (针对 v11.0 精准补完)
@@ -35,7 +35,8 @@ def ultra_wechat_locator() -> str:
                 ps_doc_path = subprocess.check_output(shell_cmd, shell=True, encoding='utf-8').strip()
                 if ps_doc_path and os.path.exists(ps_doc_path):
                     doc_path = ps_doc_path
-            except: pass
+            except (subprocess.SubprocessError, OSError, UnicodeDecodeError) as e:
+                logger.debug(f"PowerShell文档路径获取失败: {e}")
             
             base_path = storage_path.replace("MyDocuments:", doc_path)
         else:

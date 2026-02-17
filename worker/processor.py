@@ -212,14 +212,16 @@ class MessageProcessor:
                     if reply:
                         try:
                             # [Fix v10.6.1] 修正下发策略：
-                            # 只有开启了“发送到微信”且当前是“语音输入”时，才跳过文本回复
+                            # 只有开启了"发送到微信"且当前是"语音输入"时，才跳过文本回复
                             tts_to_chat = getattr(conf, 'tts_enabled', False) and getattr(conf, 'tts_send_to_chat', False)
                             should_skip_text = tts_to_chat and is_voice_input
                             
                             if not should_skip_text:
+                                # 传递原始消息作为上下文
                                 sender.sendMessage(
                                     receiver=message.sender,
                                     content=reply,
+                                    context=message.content  # 传递上下文用于智能去重
                                 )
                                 logger.info(f"✅ 文本回复已发送给 [{message.sender}]")
                             else:

@@ -24,6 +24,10 @@ class Settings:
     # === API Keys ===
     google_api_key: str = os.getenv("GOOGLE_API_KEY", "")
     tavily_api_key: str = os.getenv("TAVILY_API_KEY", "")
+    openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
+    anthropic_api_key: str = os.getenv("ANTHROPIC_API_KEY", "")
+    deepseek_api_key: str = os.getenv("DEEPSEEK_API_KEY", "")
+    qwen_api_key: str = os.getenv("QWEN_API_KEY", "")
 
     # === 代理配置 ===
     # 注意：如果留空则使用系统默认或无代理
@@ -36,6 +40,11 @@ class Settings:
     max_output_tokens: int = 2048
     # Gemini 2.5 Pro RPM Limit (Default: 15)
     genai_rpm: int = 15
+    # LLM提供商，默认为google
+    llm_provider: str = os.getenv("LLM_PROVIDER", "google")
+    # OpenAI兼容模式的基础URL
+    openai_api_base: str = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
+    deepseek_api_base: str = os.getenv("DEEPSEEK_API_BASE", "https://api.deepseek.com")
 
     # === 对话记忆 ===
     # 每个联系人保留的历史消息轮数
@@ -153,23 +162,15 @@ class Settings:
         """获取每日日志目录绝对路径"""
         return PROJECT_ROOT / self.daily_log_dir
 
-    def validate(self) -> list[str]:
+    def validate(self) -> bool:
         """
         验证关键配置项是否已设置
-
+        
         Returns:
-            缺失配置项的警告信息列表
+            bool: 验证是否通过
         """
-        warnings: list[str] = []
-        if not self.google_api_key:
-            warnings.append("GOOGLE_API_KEY 未设置，AI Agent 将无法工作")
-        if not self.tavily_api_key:
-            warnings.append("TAVILY_API_KEY 未设置，将使用浏览器搜索替代")
-        if not self.master_remark:
-            warnings.append("MASTER_REMARK 未设置，无法识别主人身份")
-        if not self.whitelist:
-            warnings.append("微信白名单为空，将不会处理任何消息")
-        return warnings
+        from config.validator import validate_configuration
+        return validate_configuration(self)
 
 
 # 全局单例

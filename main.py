@@ -45,6 +45,8 @@ if __name__ == "__main__":
 
 
 
+
+
 # 全局组件实例
 listener = WechatListener()
 processor = MessageProcessor()
@@ -135,19 +137,9 @@ def main():
     # 打印配置信息
     _printConfig()
 
-    # [Fix v10.2.5] 检查必要配置 (动态按驱动校验)
-    provider = getattr(conf, 'llm_provider', 'google').lower()
-    key_mapping = {
-        "google": ("GOOGLE_API_KEY", conf.GOOGLE_API_KEY),
-        "openai": ("OPENAI_API_KEY", conf.OPENAI_API_KEY),
-        "anthropic": ("ANTHROPIC_API_KEY", conf.ANTHROPIC_API_KEY),
-        "deepseek": ("DEEPSEEK_API_KEY", conf.DEEPSEEK_API_KEY),
-        "openai-compatible": ("OPENAI_API_KEY", conf.OPENAI_API_KEY)
-    }
-    
-    env_name, key_val = key_mapping.get(provider, ("API_KEY", None))
-    if not key_val:
-        logger.error(f"⚠️ 供应商 [{provider}] 的核心配置项 {env_name} 未配置，请在 .env 文件中设置后重启")
+    # [Fix v10.2.5] 配置验证
+    if not conf.validate():
+        logger.error("❌ 配置验证失败，请修正配置后重启程序")
         sys.exit(1)
 
     # 按依赖顺序启动模块
