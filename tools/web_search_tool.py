@@ -10,12 +10,10 @@ _current_context = None
 _current_page = None
 _playwright_instance = None
 
-@tool
-async def tavilySearch(query: str) -> str:
+
+async def _perform_tavily_search(query: str) -> str:
     """
-    [Plan B - API 搜索] 使用 Tavily API 执行异步深度搜索。
-    这是纯 API 链路，不依赖 Playwright 浏览器。
-    当 searchWeb (Plan A) 发生环境或浏览器错误时，必须调用此工具进行自愈。
+    [Internal] 执行 Tavily 搜索的具体实现
     """
     try:
         import aiohttp
@@ -49,6 +47,15 @@ async def tavilySearch(query: str) -> str:
             str(e),
             "尝试简化关键词再次搜索，或请求用户关键信息"
         )
+
+@tool
+async def tavilySearch(query: str) -> str:
+    """
+    [Plan B - API 搜索] 使用 Tavily API 执行异步深度搜索。
+    这是纯 API 链路，不依赖 Playwright 浏览器。
+    当 searchWeb (Plan A) 发生环境或浏览器错误时，必须调用此工具进行自愈。
+    """
+    return await _perform_tavily_search(query)
 
 @tool
 async def searchWeb(query: str) -> str:
@@ -109,8 +116,8 @@ async def searchWeb(query: str) -> str:
         
         # 如果 Tavily 可用，补充高质量摘要
         if conf.tavily_api_key:
-            # NOTE: 已切换为异步 aiohttp 调用
-            t_summary = await tavilySearch(query)
+            # NOTE: 已切换为异步内部函数调用，避免 Tool Sync Invocation 错误
+            t_summary = await _perform_tavily_search(query)
             if t_summary:
                 summary = f"=== API 深度搜索结果 ===\n{t_summary}\n\n=== 浏览器实时搜索结果 ===\n{summary}"
 

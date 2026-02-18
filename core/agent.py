@@ -3,6 +3,7 @@ LangChain Agent 核心
 
 基于 ReAct 模式的 AI Agent，
 支持多供应商 AI 模型与所有可用工具。
+新增: OpenClaw 代理对接支持
 """
 import asyncio
 import os
@@ -16,6 +17,7 @@ from langchain.agents import create_react_agent, AgentExecutor
 from langchain.tools import Tool
 from core.tool_manager import ToolManager
 from core.config import conf
+from core.openclaw_bridge import OpenClawChatModel
 from utils.logger import logger
 
 
@@ -53,6 +55,14 @@ def get_chat_model(provider, model_name, conf, temp=0.7, max_tokens=4096):
             temperature=temp,
             max_tokens=max_tokens,
             timeout=60,
+        )
+    elif provider == "openclaw":
+        # OpenClaw 代理对接
+        return OpenClawChatModel(
+            api_base=getattr(conf, 'openclaw_api_base', "http://localhost:9847"),
+            session_key=getattr(conf, 'openclaw_session_key', ""),
+            temperature=temp,
+            max_tokens=max_tokens,
         )
     # Qwen support temporarily disabled due to missing dependency
     # elif provider == "qwen":
@@ -123,14 +133,15 @@ Final Answer: [your response here]
         full_system_prompt = system_prompt + "\n\n" + react_instruction
 
 
+
         prompt = ChatPromptTemplate.from_messages([
             SystemMessagePromptTemplate.from_template(full_system_prompt),
             MessagesPlaceholder(variable_name="chat_history"),
-            ("human", "{input}"),
-            MessagesPlaceholder(variable_name="agent_scratchpad"),
+            ("human", "{input}\n\n{agent_scratchpad}"),
         ])
         
         agent = create_react_agent(chat_model, tools, prompt)
+
         agent_executor = AgentExecutor(
             agent=agent,
             tools=tools,
