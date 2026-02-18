@@ -1,21 +1,22 @@
 #!/usr/bin/env python3
 """
-OpenClaw Agent Bridge Server - 运行在用户本地，与我通信
+OpenClaw Agent Bridge Server - 文件桥接版本
 
-这是运行在 Windows/WSL 上的中间层，负责：
-1. 接收 wechat-agent 的 HTTP 请求
-2. 通过某种方式与我（OpenClaw 代理）通信
-3. 返回我的回复给 wechat-agent
+通过文件系统与我（xiaohuge）通信：
+1. 收到消息 -> 写入 inbox/wechat_messages.jsonl
+2. 等待我的回复 -> 从 outbox/wechat_replies.jsonl 读取
+3. 返回回复给 wechat-agent
 
-当前实现：简易版本，直接返回固定回复
-TODO: 实现与我（xiaohuge）的实际通信
+运行: python bridge_server.py
 """
 
 import os
 import sys
 import json
 import asyncio
+import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import Optional, Dict, Any
 
 try:
@@ -25,16 +26,29 @@ try:
     import uvicorn
     import aiohttp
 except ImportError:
-    print("缺少依赖，正在安装...")
+    print("Installing dependencies...")
     os.system(f"{sys.executable} -m pip install fastapi uvicorn aiohttp pydantic -q")
-    print("请重新运行脚本")
+    print("Please restart the script")
     sys.exit(0)
 
-app = FastAPI(title="OpenClaw Agent Bridge", version="1.0.0")
+app = FastAPI(title="OpenClaw Agent Bridge", version="2.0.0")
 
-# 配置
-AGENT_NAME = "xiaohuge"  # 我的 Moltbook 账号名
-MOLTBOOK_API_KEY = os.getenv("MOLTBOOK_API_KEY", "")
+# 文件桥接配置
+# 支持从环境变量配置路径，适应不同环境
+# 默认使用当前目录下的 .openclaw 文件夹
+# Windows: E:\work\wechatAGENT\.openclaw
+# Docker: /home/node/openclaw/wechat-agent/.openclaw
+PROJECT_ROOT = Path(__file__).parent.resolve()
+DEFAULT_INBOX = PROJECT_ROOT / ".openclaw" / "inbox"
+DEFAULT_OUTBOX = PROJECT_ROOT / ".openclaw" / "outbox"
+
+# 可以从环境变量覆盖路径（用于跨平台）
+INBOX_PATH = Path(os.getenv("OPENCLAW_INBOX", DEFAULT_INBOX))
+OUTBOX_PATH = Path(os.getenv("OPENCLAW_OUTBOX", DEFAULT_OUTBOX))
+
+# 确保目录存在
+INBOX_PATH.mkdir(parents=True, exist_ok=True)
+OUTBOX_PATH.mkdir(parents=True, exist_ok=True)
 
 
 class ChatRequest(BaseModel):
@@ -46,98 +60,71 @@ class ChatRequest(BaseModel):
     stream: bool = False
 
 
-async def forward_to_openclaw(message: str, sender: str, context: dict) -> str:
+async def forward_via_file_bridge(message: str, sender: str, context: dict) -> str:
     """
-    将消息转发给我（OpenClaw 代理）
+    通过文件桥接转发消息并等待回复
     
-    当前方案：
-    方式1: 通过 Moltbook API 给我发私信（有延迟）
-    方式2: 写文件到共享目录，我读取后回复（需要文件监控）
-    方式3: 直接调用 OpenClaw 的 webhook（如果有）
-    
-    当前使用：方式1 - 通过 Moltbook 私信
+    流程:
+    1. 写入消息到 inbox
+    2. 轮询 outbox 等待回复（最多60秒）
+    3. 返回回复内容
     """
+    msg_id = str(uuid.uuid4())[:8]
     
-    # 构建消息
-    context_info = f"""
-【来自 wechat-agent 的消息】
-- 发送者: {sender}
-- 时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-"""
-    if context.get("is_voice"):
-        context_info += "- 消息类型: 语音\n"
-    if context.get("group_name"):
-        context_info += f"- 群组: {context['group_name']}\n"
+    # 1. 写入消息到 inbox
+    message_file = INBOX_PATH / "wechat_messages.jsonl"
+    entry = {
+        "id": msg_id,
+        "timestamp": datetime.now().isoformat(),
+        "sender": sender,
+        "message": message,
+        "context": context
+    }
     
-    full_message = f"{context_info}\n【内容】\n{message}"
-    
-    # 方式1: 通过 Moltbook 给我发私信
-    if MOLTBOOK_API_KEY:
-        try:
-            async with aiohttp.ClientSession() as session:
-                # 先检查是否有未读私信
-                async with session.get(
-                    "https://www.moltbook.com/api/v1/dms",
-                    headers={"Authorization": f"Bearer {MOLTBOOK_API_KEY}"}
-                ) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        # 这里可以实现更复杂的双向通信
-                        pass
-                
-                # 发送私信给我
-                async with session.post(
-                    "https://www.moltbook.com/api/v1/dms",
-                    headers={
-                        "Authorization": f"Bearer {MOLTBOOK_API_KEY}",
-                        "Content-Type": "application/json"
-                    },
-                    json={
-                        "recipient": "xiaohuge",
-                        "content": full_message
-                    }
-                ) as resp:
-                    if resp.status == 200:
-                        return "[消息已通过 Moltbook 发送给 OpenClaw 代理，等待回复...]"
-        except Exception as e:
-            print(f"Moltbook API error: {e}")
-    
-    # 方式2: 写入共享文件
     try:
-        message_file = os.path.expanduser("~/.openclaw/inbox/wechat_messages.jsonl")
-        os.makedirs(os.path.dirname(message_file), exist_ok=True)
-        
         with open(message_file, "a", encoding="utf-8") as f:
-            f.write(json.dumps({
-                "timestamp": datetime.now().isoformat(),
-                "sender": sender,
-                "message": message,
-                "context": context
-            }, ensure_ascii=False) + "\n")
-        
-        # 检查是否有回复文件
-        reply_file = os.path.expanduser("~/.openclaw/outbox/wechat_replies.jsonl")
-        if os.path.exists(reply_file):
-            with open(reply_file, "r", encoding="utf-8") as f:
-                lines = f.readlines()
-                if lines:
-                    last_reply = json.loads(lines[-1])
-                    return last_reply.get("reply", "[收到消息，正在思考...]")
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Message #{msg_id} written to inbox")
     except Exception as e:
-        print(f"File bridge error: {e}")
+        print(f"Error writing to inbox: {e}")
+        return f"[Error] Failed to write message: {e}"
     
-    # 默认回复
-    return f"""收到来自 {sender} 的消息：
-"{message[:100]}{'...' if len(message) > 100 else ''}"
-
-✅ wechat-agent 已成功与 OpenClaw Bridge 对接！
-
-当前状态：
-- Bridge Server: 运行中
-- OpenClaw Agent: xiaohuge (在线)
-- 通信方式: HTTP API
-
-注意：这是演示回复。实际部署后，消息将转发给我处理。"""
+    # 2. 轮询等待回复（最多30秒，轮询间隔0.1秒）
+    reply_file = OUTBOX_PATH / "wechat_replies.jsonl"
+    start_time = datetime.now()
+    max_wait = 30  # 减少到30秒
+    
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Waiting for reply #{msg_id}...")
+    
+    # 先等待1秒给处理时间
+    await asyncio.sleep(1)
+    
+    while (datetime.now() - start_time).seconds < max_wait:
+        if reply_file.exists():
+            try:
+                with open(reply_file, "r", encoding="utf-8") as f:
+                    lines = f.readlines()
+                
+                # 查找对应 msg_id 的回复
+                for line in reversed(lines):
+                    try:
+                        reply_entry = json.loads(line.strip())
+                        if reply_entry.get("reply_to") == msg_id:
+                            reply = reply_entry.get("reply", "[Empty reply]")
+                            print(f"[{datetime.now().strftime('%H:%M:%S')}] Reply #{msg_id} found")
+                            return reply
+                    except json.JSONDecodeError:
+                        continue
+                        
+            except Exception as e:
+                print(f"Error reading reply file: {e}")
+        
+        # 等待后重试（100ms轮询）
+        await asyncio.sleep(0.1)
+    
+    # 超时
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Timeout waiting for reply #{msg_id}")
+    return "[Timeout] OpenClaw agent did not respond within 30 seconds. The agent may be offline or the file bridge is not synchronized.\n\nPossible solutions:\n1. Check if the file bridge monitor is running\n2. Switch to HTTP mode for faster response\n3. Check file permissions between Windows and Docker"
 
 
 @app.get("/health")
@@ -145,9 +132,11 @@ async def health_check():
     """健康检查"""
     return {
         "status": "healthy",
-        "agent": AGENT_NAME,
+        "mode": "file_bridge",
+        "inbox": str(INBOX_PATH),
+        "outbox": str(OUTBOX_PATH),
         "timestamp": datetime.now().isoformat(),
-        "version": "1.0.0"
+        "version": "2.0.0"
     }
 
 
@@ -155,7 +144,7 @@ async def health_check():
 async def chat(request: ChatRequest):
     """非流式聊天接口"""
     try:
-        reply = await forward_to_openclaw(
+        reply = await forward_via_file_bridge(
             message=request.message,
             sender=request.sender,
             context=request.context
@@ -176,13 +165,13 @@ async def chat_stream(request: ChatRequest):
     """流式聊天接口"""
     async def generate():
         try:
-            reply = await forward_to_openclaw(
+            reply = await forward_via_file_bridge(
                 message=request.message,
                 sender=request.sender,
                 context=request.context
             )
             
-            # 按字符流式输出
+            # 模拟流式输出
             for char in reply:
                 chunk = json.dumps({"content": char})
                 yield f"data: {chunk}\n\n"
@@ -200,9 +189,32 @@ async def chat_stream(request: ChatRequest):
 @app.get("/api/v1/status")
 async def get_status():
     """获取状态"""
+    inbox_count = 0
+    outbox_count = 0
+    
+    try:
+        msg_file = INBOX_PATH / "wechat_messages.jsonl"
+        if msg_file.exists():
+            with open(msg_file, "r", encoding="utf-8") as f:
+                inbox_count = len(f.readlines())
+    except:
+        pass
+    
+    try:
+        reply_file = OUTBOX_PATH / "wechat_replies.jsonl"
+        if reply_file.exists():
+            with open(reply_file, "r", encoding="utf-8") as f:
+                outbox_count = len(f.readlines())
+    except:
+        pass
+    
     return {
-        "agent_name": AGENT_NAME,
-        "moltbook_connected": bool(MOLTBOOK_API_KEY),
+        "agent_name": "xiaohuge",
+        "mode": "file_bridge",
+        "inbox_path": str(INBOX_PATH),
+        "outbox_path": str(OUTBOX_PATH),
+        "inbox_messages": inbox_count,
+        "outbox_replies": outbox_count,
         "timestamp": datetime.now().isoformat()
     }
 
@@ -214,14 +226,19 @@ def main():
     
     print(f"""
 ╔════════════════════════════════════════════════╗
-║     OpenClaw Agent Bridge Server v1.0.0       ║
+║     OpenClaw Agent Bridge Server v2.0.0       ║
 ╠════════════════════════════════════════════════╣
-║  Agent: {AGENT_NAME:36} ║
-║  Host:  {host:36} ║
-║  Port:  {port:<36} ║
+║  Mode:   File Bridge                           ║
+║  Agent:  xiaohuge                              ║
+║  Host:   {host:<36} ║
+║  Port:   {port:<36} ║
+╠════════════════════════════════════════════════╣
+║  Inbox:  {str(INBOX_PATH):<36} ║
+║  Outbox: {str(OUTBOX_PATH):<36} ║
 ╚════════════════════════════════════════════════╝
 
-启动中...
+Started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+Press Ctrl+C to stop
     """)
     
     uvicorn.run(app, host=host, port=port, log_level="info")

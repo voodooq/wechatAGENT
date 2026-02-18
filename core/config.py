@@ -42,7 +42,6 @@ class Config:
             pass
 
         # 3. 环境变量覆盖
-
         for key in dir(self):
             if not key.startswith("_"):
                 env_val = os.getenv(key.upper())
@@ -51,6 +50,9 @@ class Config:
                     if key == 'whitelist':
                         # 将逗号分隔的字符串转换为列表
                         setattr(self, key, [item.strip() for item in env_val.split(',') if item.strip()])
+                    # 特殊处理 openclaw_enabled 布尔值
+                    elif key == 'openclaw_enabled':
+                        setattr(self, key, env_val.lower() == 'true')
                     else:
                         setattr(self, key, env_val)
         
@@ -58,11 +60,17 @@ class Config:
         self.db_full_path = self.PROJECT_ROOT / getattr(self, 'db_path', 'data/work.db')
         self.log_full_dir = self.PROJECT_ROOT / "logs"
         
-        # 5. 微信路径探测
+        # 5. OpenClaw 配置（如果环境变量未设置，使用默认值）
+        if not hasattr(self, 'openclaw_enabled') or self.openclaw_enabled is None:
+            self.openclaw_enabled = os.getenv("OPENCLAW_ENABLED", "false").lower() == "true"
+        if not hasattr(self, 'openclaw_mode') or self.openclaw_mode is None:
+            self.openclaw_mode = os.getenv("OPENCLAW_MODE", "bridge")
+        
+        # 6. 微信路径探测
         self.wechat_files_root = self._detect_wechat_path()
         self.wechat_user_path = self._detect_wechat_user_path()
         
-        # 6. 代理配置
+        # 7. 代理配置
         self._inject_proxy_config()
 
     def _detect_wechat_path(self) -> str:
