@@ -16,7 +16,7 @@ class OpenClawHTTPClient:
     
     def __init__(self, api_base: str = "http://localhost:9848"):
         self.api_base = api_base
-        self.timeout = 15  # 15秒超时
+        self.timeout = 60  # 60秒超时，匹配服务器端
     
     async def send_message(
         self, 
@@ -48,7 +48,7 @@ class OpenClawHTTPClient:
                         return f"[HTTP Error] {resp.status}: {error}"
                         
         except asyncio.TimeoutError:
-            return "[Timeout] HTTP request timeout (15s)"
+            return "抱歉，响应超时了，请稍后再试~\n\n---\n🤖 AI 生成"
         except Exception as e:
             return f"[Error] HTTP client: {str(e)}"
     
