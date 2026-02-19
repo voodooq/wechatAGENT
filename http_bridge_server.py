@@ -72,8 +72,8 @@ async def chat(request: ChatRequest):
     print(f"  From: {request.sender}")
     print(f"  Content: {request.message[:80]}{'...' if len(request.message) > 80 else ''}")
     
-    # 等待回复（最多10秒）
-    max_wait = 100  # 100 * 0.1s = 10秒
+    # 等待回复（最多60秒）
+    max_wait = 600  # 600 * 0.1s = 60秒
     for i in range(max_wait):
         if msg_id in reply_cache:
             reply = reply_cache.pop(msg_id)
@@ -83,7 +83,9 @@ async def chat(request: ChatRequest):
     
     # 超时，从队列移除
     message_queue[:] = [m for m in message_queue if m["id"] != msg_id]
-    raise HTTPException(status_code=504, detail="Timeout waiting for reply")
+    # 返回友好的超时提示
+    timeout_reply = "抱歉，我思考的时间有点长，请稍后再试~\n\n---\n🤖 AI 生成"
+    return ChatResponse(reply=timeout_reply, timestamp=datetime.now().isoformat())
 
 
 @app.get("/api/v1/messages")
@@ -107,22 +109,22 @@ async def post_reply(msg_id: str, reply: str):
 def process_message(message: dict) -> str:
     """
     处理消息（这里是我实际回复的地方）
+    
+    注意：此函数会被 OpenClaw 实际调用，返回的回复会发送给用户
     """
     sender = message.get("sender", "unknown")
     content = message.get("message", "")
     
-    # 我的回复
-    reply = f"""你好！我是小虎哥 (xiaohuge) 🦞
+    # 简化回复，只返回核心信息 + AI 标记
+    # 实际回复内容由 OpenClaw 生成，这里只是占位
+    reply = f"""[OpenClaw 处理中...]
 
-通过 HTTP 模式收到你的消息：
-"{content[:60]}{'...' if len(content) > 60 else ''}"
+用户消息：{content}
 
-当前状态：
-✅ HTTP Bridge：快速模式
-✅ 延迟：< 1秒
-✅ 消息接收：成功
+请使用 OpenClaw 工具处理此消息并生成回复。
 
-时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"""
+---
+🤖 AI 生成"""
     
     return reply
 
@@ -151,7 +153,9 @@ async def auto_reply_worker():
 @app.on_event("startup")
 async def startup():
     """启动时运行"""
-    asyncio.create_task(auto_reply_worker())
+    # 禁用自动回复工作线程 - 等待 OpenClaw 主动回复
+    # asyncio.create_task(auto_reply_worker())
+    print("  自动回复已禁用，等待 OpenClaw 处理...")
 
 
 def main():
