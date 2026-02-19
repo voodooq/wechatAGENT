@@ -48,7 +48,7 @@ class OpenClawHTTPClient:
                         return f"[HTTP Error] {resp.status}: {error}"
                         
         except asyncio.TimeoutError:
-            return "抱歉，响应超时了，请稍后再试~\n\n---\n🤖 AI 生成"
+            return "[Timeout] 抱歉，响应超时了，请稍后再试~\n\n---\n🤖 AI 生成"
         except Exception as e:
             return f"[Error] HTTP client: {str(e)}"
     

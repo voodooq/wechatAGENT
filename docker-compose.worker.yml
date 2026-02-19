@@ -1,0 +1,92 @@
+# OpenClaw Bridge Worker Docker 配置
+# 
+# 用途: 在 WSL Docker 中运行 Bridge Worker
+# 自动连接到主机的 HTTP Bridge Server (端口 9848)
+
+version: '3.8'
+
+services:
+  openclaw-worker:
+    image: node:22
+    container_name: openclaw-bridge-worker
+    
+    # 使用 host 网络模式，可以直接访问主机的 localhost
+    network_mode: host
+    
+    # 环境变量
+    environment:
+      - OPENCLAW_BRIDGE_URL=http://host.docker.internal:9848
+      - OPENCLAW_POLL_INTERVAL=1.0
+      - TAVILY_API_KEY=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
+      - TAVILY_MCP_URL=https://mcp.tavily.com/mcp/
+      - NODE_ENV=production
+    
+    # 挂载卷
+    volumes:
+      # 挂载 wechat-agent 代码目录
+      - /mnt/e/work/wechatAGENT:/home/node/openclaw/wechat-agent:rw
+      
+      # 挂载 OpenClaw 工作目录
+      - /home/node/.openclaw:/home/node/.openclaw:rw
+      
+      # 挂载 Node.js 缓存（加速）
+      - openclaw-node-modules:/home/node/openclaw/wechat-agent/node_modules
+      
+      # 挂载 Python 依赖缓存
+      - openclaw-pip-cache:/root/.cache/pip
+    
+    # 工作目录
+    working_dir: /home/node/openclaw/wechat-agent
+    
+    # 启动命令
+    command: >
+      sh -c "
+        echo '========================================' &&
+        echo '  OpenClaw Bridge Worker' &&
+        echo '  运行在 Docker 中' &&
+        echo '========================================' &&
+        echo '' &&
+        echo '📦 安装系统依赖...' &&
+        apt-get update -qq &&
+        apt-get install -y -qq python3 python3-pip python3-venv curl 2>/dev/null &&
+        echo '' &&
+        echo '📦 检查 Node.js (用于 MCP)...' &&
+        which npx || (curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt-get install -y nodejs) &&
+        echo '✅ Node.js: ' && node --version &&
+        echo '' &&
+        echo '📦 安装 Python 依赖...' &&
+        pip3 install -q aiohttp playwright html2text mcp 2>/dev/null || pip install aiohttp playwright html2text mcp &&
+        echo '' &&
+        echo '📦 安装 Chromium...' &&
+        playwright install chromium 2>/dev/null || echo '⚠️ Chromium 可能已安装' &&
+        echo '' &&
+        echo '🚀 启动 Bridge Worker...' &&
+        echo '   Bridge URL: http://host.docker.internal:9848' &&
+        echo '' &&
+        cd /home/node/openclaw/wechat-agent &&
+        python3 openclaw_bridge_worker.py
+      "
+    
+    # 自动重启策略
+    restart: unless-stopped
+    
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    
+    # 日志配置
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
+
+volumes:
+  openclaw-node-modules:
+  openclaw-pip-cache:

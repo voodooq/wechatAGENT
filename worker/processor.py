@@ -161,7 +161,6 @@ class MessageProcessor:
                                     
                                     sender.sendMessage(message.sender, f"👂 我听到了: \"{user_input_raw}\"")
                                     # [v11.9] 增加微小缓冲防止 COM 竞争
-                                    import time
                                     time.sleep(0.5)
                                     # 注意：后续的大脑处理逻辑会使用 message.content
                                 else:

@@ -29,16 +29,6 @@ from worker.processor import MessageProcessor
 from scheduler.daily_summary import DailySummaryScheduler
 
 
-def main():
-    # Setup exception handler
-    setupGlobalExceptionHandler()
-    pass
-
-if __name__ == "__main__":
-    main()
-
-
-
 
 
 

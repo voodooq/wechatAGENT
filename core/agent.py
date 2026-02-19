@@ -137,7 +137,11 @@ async def processMessage(userInput: str, sender: str, role_level: int = 1, **kwa
                 )
             
             # 检查是否出错
-            if reply and not reply.startswith("[Error]") and not reply.startswith("[Timeout]"):
+            # NOTE: 同时检查英文前缀和中文关键词，覆盖所有错误格式
+            error_indicators = ["[Error]", "[Timeout]", "[HTTP Error]", "[Bridge Error]"]
+            is_error = not reply or any(reply.startswith(prefix) for prefix in error_indicators)
+            
+            if not is_error:
                 logger.info(f"[OpenClaw] Reply received: {reply[:50]}...")
                 return reply
             else:

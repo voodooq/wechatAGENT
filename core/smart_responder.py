@@ -35,6 +35,15 @@ class SmartResponder:
             Tuple[是否应该发送, 原因说明]
         """
         try:
+            # 0. [v11.1] 系统消息白名单 (优先放行)
+            # 包含特定关键词的消息 (如超时、错误、AI生成标识) 直接放行，不进行去重/相似度检查
+            system_keywords = [
+                "响应超时", "[Timeout]", "[Error]", "Access Denied", 
+                "无法连接", "请稍后再试", "AI 生成", "[OpenClaw Error]"
+            ]
+            if any(k in reply_content for k in system_keywords):
+                return True, "系统消息白名单放行"
+
             # 1. 基础去重检查
             basic_check = self._basic_duplicate_check(receiver, reply_content)
             if not basic_check[0]:
@@ -50,7 +59,7 @@ class SmartResponder:
                 context_check = self._context_relevance_check(receiver, reply_content, context)
                 if not context_check[0]:
                     return context_check
-                    
+            
             # 4. 记录本次回复
             self._record_reply(receiver, reply_content)
             

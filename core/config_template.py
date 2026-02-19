@@ -53,3 +53,8 @@ class ConfigTemplate:
     # 稳定性
     retry_delay = 5.0
     max_retries = 3
+    
+    # OpenClaw 配置
+    openclaw_enabled = False
+    openclaw_mode = "bridge"  # bridge | http | file | moltbook
+    openclaw_http_api = "http://localhost:9848"

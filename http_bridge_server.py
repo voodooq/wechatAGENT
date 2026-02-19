@@ -1,27 +1,51 @@
 #!/usr/bin/env python3
 """
-OpenClaw HTTP Bridge - 快速 HTTP 通信模式
+OpenClaw HTTP Bridge - OpenClaw 直连模式
 
-与 file_bridge_monitor.py 配合使用，通过 HTTP 通信（比文件更快）
-运行在我的环境中
+工作方式：
+1. 接收 wechat-agent 的消息 → 存入队列
+2. OpenClaw 定期轮询 /api/v1/messages 获取消息
+3. OpenClaw 处理完成后调用 /api/v1/reply 提交回复
+4. wechat-agent 获取回复
 
 用法:
     python http_bridge_server.py
+    
+OpenClaw 端配置:
+    设置环境变量 OPENCLAW_BRIDGE_URL=http://host.docker.internal:9848
 """
 
 import os
+import sys
 import json
 import asyncio
 from datetime import datetime
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-import uvicorn
+from pathlib import Path
+from typing import Dict, Optional
 
-app = FastAPI(title="OpenClaw HTTP Bridge", version="1.0.0")
+try:
+    from fastapi import FastAPI, HTTPException
+    from pydantic import BaseModel
+    import uvicorn
+except ImportError:
+    print("Installing dependencies...")
+    os.system(f"{sys.executable} -m pip install fastapi uvicorn pydantic -q")
+    print("Please restart the script")
+    sys.exit(0)
 
-# 消息队列（内存中）
-message_queue = []
-reply_cache = {}
+app = FastAPI(title="OpenClaw HTTP Bridge", version="3.0.0")
+
+# 消息队列和回复缓存
+message_queue: list = []
+reply_cache: Dict[str, str] = {}
+processed_messages: set = set()  # 已处理的消息 ID
+
+# 统计数据
+stats = {
+    "total_received": 0,
+    "total_replied": 0,
+    "start_time": datetime.now().isoformat()
+}
 
 
 class ChatRequest(BaseModel):
@@ -37,13 +61,20 @@ class ChatResponse(BaseModel):
     timestamp: str
 
 
+class ReplyRequest(BaseModel):
+    """回复提交请求"""
+    msg_id: str
+    reply: str
+
+
 @app.get("/health")
 async def health_check():
     """健康检查"""
     return {
         "status": "healthy",
-        "mode": "http",
+        "mode": "openclaw-direct",
         "pending_messages": len(message_queue),
+        "stats": stats,
         "timestamp": datetime.now().isoformat()
     }
 
@@ -51,12 +82,19 @@ async def health_check():
 @app.post("/api/v1/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     """
-    处理消息并等待回复
+    接收消息并等待 OpenClaw 回复
     
-    这是同步接口，会等待我的回复（最多10秒）
+    这是同步接口，会等待 OpenClaw 的回复（最多 120 秒）
     """
     import uuid
     msg_id = str(uuid.uuid4())[:8]
+    
+    # 检查是否已处理过（去重）
+    if msg_id in processed_messages:
+        return ChatResponse(
+            reply="[Duplicate] 消息已处理",
+            timestamp=datetime.now().isoformat()
+        )
     
     # 添加消息到队列
     message_entry = {
@@ -64,98 +102,85 @@ async def chat(request: ChatRequest):
         "timestamp": datetime.now().isoformat(),
         "sender": request.sender,
         "message": request.message,
-        "context": request.context
+        "context": request.context,
+        "status": "pending"  # pending, processing, completed
     }
     message_queue.append(message_entry)
+    stats["total_received"] += 1
     
-    print(f"\n[{datetime.now().strftime('%H:%M:%S')}] HTTP Message #{msg_id}")
+    print(f"\n[{datetime.now().strftime('%H:%M:%S')}] 📥 收到消息 #{msg_id}")
     print(f"  From: {request.sender}")
-    print(f"  Content: {request.message[:80]}{'...' if len(request.message) > 80 else ''}")
+    print(f"  Content: {request.message[:60]}{'...' if len(request.message) > 60 else ''}")
+    print(f"  等待 OpenClaw 处理...")
     
-    # 等待回复（最多60秒）
-    max_wait = 600  # 600 * 0.1s = 60秒
+    # 等待回复（最多 120 秒）
+    max_wait = 1200  # 1200 * 0.1s = 120 秒
     for i in range(max_wait):
         if msg_id in reply_cache:
             reply = reply_cache.pop(msg_id)
-            print(f"  Reply sent")
+            processed_messages.add(msg_id)
+            stats["total_replied"] += 1
+            print(f"  ✅ 消息 #{msg_id} 已完成")
             return ChatResponse(reply=reply, timestamp=datetime.now().isoformat())
         await asyncio.sleep(0.1)
     
-    # 超时，从队列移除
+    # 超时
     message_queue[:] = [m for m in message_queue if m["id"] != msg_id]
-    # 返回友好的超时提示
-    timeout_reply = "抱歉，我思考的时间有点长，请稍后再试~\n\n---\n🤖 AI 生成"
+    timeout_reply = "抱歉，响应超时了，请稍后再试~\n\n---\n🤖 AI 生成"
     return ChatResponse(reply=timeout_reply, timestamp=datetime.now().isoformat())
 
 
 @app.get("/api/v1/messages")
 async def get_messages():
-    """获取待处理的消息（供我调用）"""
+    """
+    获取待处理的消息列表（供 OpenClaw 轮询）
+    
+    OpenClaw 应该定期调用此接口获取新消息
+    """
+    pending = [m for m in message_queue if m["status"] == "pending"]
     return {
-        "messages": message_queue,
-        "count": len(message_queue)
+        "messages": pending,
+        "count": len(pending),
+        "stats": stats
     }
 
 
+@app.post("/api/v1/messages/{msg_id}/status")
+async def update_message_status(msg_id: str, status: str):
+    """更新消息状态（OpenClaw 开始处理时调用）"""
+    for msg in message_queue:
+        if msg["id"] == msg_id:
+            msg["status"] = status
+            print(f"  🔄 消息 #{msg_id} 状态更新为: {status}")
+            return {"status": "ok"}
+    return {"status": "error", "message": "Message not found"}
+
+
 @app.post("/api/v1/reply")
-async def post_reply(msg_id: str, reply: str):
-    """提交回复（供我调用）"""
-    reply_cache[msg_id] = reply
-    # 从队列移除
-    message_queue[:] = [m for m in message_queue if m["id"] != msg_id]
+async def post_reply(request: ReplyRequest):
+    """
+    提交回复（供 OpenClaw 调用）
+    
+    OpenClaw 处理完消息后，调用此接口提交回复
+    """
+    reply_cache[request.msg_id] = request.reply
+    
+    # 更新消息状态
+    for msg in message_queue:
+        if msg["id"] == request.msg_id:
+            msg["status"] = "completed"
+            break
+    
+    print(f"  📤 收到回复 #{request.msg_id} (长度: {len(request.reply)})")
+    return {"status": "ok", "msg_id": request.msg_id}
+
+
+@app.delete("/api/v1/messages/{msg_id}")
+async def delete_message(msg_id: str):
+    """删除已处理的消息"""
+    global message_queue
+    message_queue = [m for m in message_queue if m["id"] != msg_id]
     return {"status": "ok"}
-
-
-def process_message(message: dict) -> str:
-    """
-    处理消息（这里是我实际回复的地方）
-    
-    注意：此函数会被 OpenClaw 实际调用，返回的回复会发送给用户
-    """
-    sender = message.get("sender", "unknown")
-    content = message.get("message", "")
-    
-    # 简化回复，只返回核心信息 + AI 标记
-    # 实际回复内容由 OpenClaw 生成，这里只是占位
-    reply = f"""[OpenClaw 处理中...]
-
-用户消息：{content}
-
-请使用 OpenClaw 工具处理此消息并生成回复。
-
----
-🤖 AI 生成"""
-    
-    return reply
-
-
-async def auto_reply_worker():
-    """
-    自动回复工作线程
-    监控消息队列并自动回复
-    """
-    while True:
-        if message_queue:
-            message = message_queue.pop(0)
-            msg_id = message.get("id")
-            
-            # 生成回复
-            reply = process_message(message)
-            
-            # 存入缓存
-            reply_cache[msg_id] = reply
-            
-            print(f"  Auto-replied to #{msg_id}")
-        
-        await asyncio.sleep(0.05)  # 50ms检查一次
-
-
-@app.on_event("startup")
-async def startup():
-    """启动时运行"""
-    # 禁用自动回复工作线程 - 等待 OpenClaw 主动回复
-    # asyncio.create_task(auto_reply_worker())
-    print("  自动回复已禁用，等待 OpenClaw 处理...")
 
 
 def main():
@@ -164,15 +189,22 @@ def main():
     
     print(f"""
 ╔════════════════════════════════════════════════╗
-║     OpenClaw HTTP Bridge Server v1.0.0        ║
+║     OpenClaw HTTP Bridge Server v3.0.0        ║
 ╠════════════════════════════════════════════════╣
-║  Mode:   HTTP (Fast Mode)                      ║
-║  Agent:  xiaohuge                              ║
+║  Mode:   OpenClaw Direct Connection            ║
 ║  Host:   {host:<36} ║
 ║  Port:   {port:<36} ║
 ╚════════════════════════════════════════════════╝
 
-Auto-reply worker running...
+📋 OpenClaw 端配置:
+   export OPENCLAW_BRIDGE_URL=http://host.docker.internal:{port}
+   
+🔄 工作流:
+   1. wechat-agent 发送消息到 /api/v1/chat
+   2. OpenClaw 轮询 /api/v1/messages 获取消息
+   3. OpenClaw 处理完成后 POST /api/v1/reply
+   4. wechat-agent 收到回复
+
 Press Ctrl+C to stop
     """)
     

@@ -1,0 +1,16 @@
+[Unit]
+Description=OpenClaw Bridge Worker
+Documentation=https://github.com/openclaw/openclaw
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/home/node/openclaw/wechat-agent
+ExecStart=/usr/bin/docker compose -f docker-compose.yml up -d
+ExecStop=/usr/bin/docker compose -f docker-compose.yml down
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

@@ -48,6 +48,9 @@ class WechatListener:
         self._wx = None
         # [防回环] 启动时标记为首次轮询，用于忽略启动前的历史消息
         self._first_poll = True
+        # [启动时间戳] 记录启动时间，只处理启动后收到的新消息
+        self._start_timestamp = time.time()
+        logger.info(f"[启动时间] 监听器初始化时间: {datetime.fromtimestamp(self._start_timestamp).strftime('%Y-%m-%d %H:%M:%S')}")
 
     @retryOnFailure(maxRetries=5, delay=3.0)
     def _initWechat(self):
@@ -60,7 +63,7 @@ class WechatListener:
         try:
             self._wx.UiaAPI.SwitchToThisWindow()
         except: pass
-        
+
         logger.info("微信客户端连接成功")
 
         # 注册监听的联系人/群
@@ -68,26 +71,26 @@ class WechatListener:
             try:
                 # AddListenChat 前先确保窗口状态，减少超时概率
                 keepAliveWechatWindow(force_focus=False)
-                
+
                 # [FIX] 在尝试 AddListenChat 之前，先使用键盘流搜索激活聊天窗口
                 # 这可以确保联系人列表中的控件是可见的
                 from utils.wx_interaction import activate_chat_window
                 activation_success = activate_chat_window(name)
-                
+
                 if not activation_success:
                     logger.warning(f"无法激活聊天窗口 [{name}]，跳过监听注册")
                     continue
-                
+
                 # 给微信一点时间让UI稳定
                 time.sleep(1.0)
-                
+
                 # 尝试注册监听
                 self._wx.AddListenChat(who=name)
                 logger.info(f"已注册监听: {name}")
             except Exception as e:
                 logger.warning(
                     f"⚠️ 无法锁定控件 [{name}] (Find Control Timeout)，"
-                    f"已自动切换到‘全局监听模式’。详细错误: {e}"
+                    f"已自动切换到'全局监听模式'。详细错误: {e}"
                 )
 
     def _pollMessages(self):
@@ -99,7 +102,7 @@ class WechatListener:
             # 在后台线程初始化 COM
             pythoncom.CoInitialize()
             logger.debug("监听器线程 COM 初始化成功")
-            
+
             # 在后台线程实例化微信对象，确保线程亲和性
             with ui_lock:
                 self._initWechat()
@@ -122,7 +125,7 @@ class WechatListener:
                             self._initWechat()
                             continue
                         raise e
-                
+
                 # 周期性心跳日志 (每 60 轮，约 1 分钟一次)
                 if not hasattr(self, '_poll_count'): self._poll_count = 0
                 self._poll_count += 1
@@ -131,23 +134,22 @@ class WechatListener:
 
                 # 诊断日志：每轮轮询结果
                 if msgs:
-                    # [v8.3 核心修复] 启动“消息风暴”屏蔽 (Full Flush)
-                    if self._first_poll:
-                        total_chats = len(msgs)
-                        logger.warning(f"🚫 启动检测：发现 {total_chats} 个会话存在存量消息，正在执行物理清空...")
-                        # 彻底丢弃第一批存量，不进入任何下游逻辑
-                        self._first_poll = False
-                        continue 
-                    
                     logger.debug(f"[诊断] GetListenMessage 返回 {len(msgs)} 个会话")
-                else:
-                    if self._first_poll:
-                        self._first_poll = False
                 
+                # [v8.3 核心修复] 首次轮询标记 - 无论msgs是否为空都立即标记
+                if self._first_poll:
+                    if msgs:
+                        total_chats = len(msgs)
+                        total_msgs = sum(len(msgs.get(chat, [])) for chat in msgs)
+                        logger.warning(f"🚫 启动检测：发现 {total_chats} 个会话存在存量消息，共 {total_msgs} 条，将使用启动时间戳过滤...")
+                    else:
+                        logger.info("✅ 启动检测：未发现存量消息")
+                    self._first_poll = False
+
                 for chat in msgs:
                     who = chat.who
                     one_msgs = msgs.get(chat, [])
-                    
+
                     if not one_msgs:
                         continue
 
@@ -157,33 +159,56 @@ class WechatListener:
                     # 鉴权
                     from core.security import security_gate, RoleLevel
                     auth_info = security_gate.authenticate(who, room_name)
-                    
+
                     if auth_info.role_level == RoleLevel.STRANGER:
                         continue
 
                     from wechat.commands import handle_admin_command
-                    
+
                     for msg in one_msgs:
                         msg_type = getattr(msg, 'type', 'UNKNOWN')
                         msg_content = str(getattr(msg, 'content', ''))
-                        logger.debug(f"[监听诊断] 收到消息: from={who}, type={msg_type}, content={msg_content[:20]}")
                         
+                        # [启动时间过滤] 只处理启动后收到的新消息
+                        msg_time = getattr(msg, 'time', None)
+                        if msg_time:
+                            try:
+                                # 转换消息时间戳
+                                if isinstance(msg_time, (int, float)):
+                                    # Unix 时间戳 (秒或毫秒)
+                                    msg_timestamp = float(msg_time)
+                                    if msg_timestamp > 1e10:  # 毫秒时间戳
+                                        msg_timestamp = msg_timestamp / 1000
+                                elif isinstance(msg_time, datetime):
+                                    msg_timestamp = msg_time.timestamp()
+                                else:
+                                    msg_timestamp = None
+                                
+                                # 如果时间戳早于启动时间，跳过
+                                if msg_timestamp and msg_timestamp < self._start_timestamp:
+                                    logger.debug(f"🚫 跳过历史消息 (启动前): {msg_content[:20]}...")
+                                    continue
+                            except Exception as e:
+                                logger.debug(f"时间戳解析失败，跳过检查: {e}")
+                        
+                        logger.debug(f"[监听诊断] 收到消息: from={who}, type={msg_type}, content={msg_content[:20]}")
+
                         # 兼容性获取 is_self
                         msg_is_self = getattr(msg, 'is_self', None)
                         if msg_is_self is None:
                             msg_is_self = (msg_type == 'self')
-                        
+
                         # 2. [核心] 基于指纹的自发消息拦截
                         # 只有当消息包含AI签名时才视为AI自发消息进行拦截
                         ai_signature = getattr(conf, 'ai_signature', ' [IronSentinel v10.0]')
-                        
+
                         if msg_is_self and ai_signature in msg_content:
                             logger.debug(f"🛑 拦截AI自发消息 (包含签名): {msg_content[:20]}...")
                             continue
                         elif msg_is_self:
                             # 这是用户自己发送的消息，不应该拦截
                             logger.debug(f"👤 用户自发消息 (无AI签名): {msg_content[:20]}...")
-                            
+
                         # 3. [v12.2] 原子级指纹去重 (视网膜识别)
                         if deduplicator.is_duplicate(who, msg_content, msg_type):
                             logger.debug(f"🛑 拦截重复消息指纹: {msg_content[:20]}...")
@@ -228,7 +253,7 @@ class WechatListener:
                 time.sleep(conf.retry_delay)
 
             time.sleep(conf.listen_interval)
-            
+
         # 退出循环时释放 COM
         try:
             pythoncom.CoUninitialize()
