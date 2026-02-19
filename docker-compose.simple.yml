@@ -1,0 +1,26 @@
+services:
+  http-bridge:
+    image: python:3.11-slim
+    container_name: openclaw-http-bridge
+    ports:
+      - "9848:9848"
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: pip3 install fastapi uvicorn pydantic aiohttp -q && python3 http_bridge_server.py
+    restart: unless-stopped
+
+  bridge-worker:
+    image: python:3.11-slim
+    container_name: openclaw-bridge-worker
+    depends_on:
+      - http-bridge
+    environment:
+      - OPENCLAW_BRIDGE_URL=http://http-bridge:9848
+      - OPENCLAW_POLL_INTERVAL=1.0
+      - TAVILY_API_KEY=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
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: pip3 install aiohttp playwright mcp -q && python3 openclaw_bridge_worker.py
+    restart: unless-stopped

@@ -1,0 +1,23 @@
+services:
+  http-bridge:
+    build:
+      context: .
+      dockerfile: Dockerfile.bridge
+    container_name: openclaw-http-bridge
+    ports:
+      - "9848:9848"
+    volumes:
+      - .:/app
+    restart: unless-stopped
+
+  bridge-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.bridge
+    container_name: openclaw-bridge-worker
+    environment:
+      - OPENCLAW_BRIDGE_URL=http://http-bridge:9848
+      - TAVILY_API_KEY=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
+    volumes:
+      - .:/app
+    restart: unless-stopped

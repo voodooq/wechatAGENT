@@ -1,0 +1,11 @@
+services:
+  http-bridge:
+    image: python:3.11
+    container_name: openclaw-http-bridge
+    ports:
+      - "9848:9848"
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: python3 http_bridge_server.py
+    restart: unless-stopped
