@@ -174,7 +174,6 @@ class BridgeWorker:
                         result_parts.append(f"【Tavily MCP 搜索结果】\n{search_result[:2000]}")
                         
                         # 尝试访问第一个结果获取更多信息
-                        import re
                         url_matches = re.findall(r'https?://[^\s\)]+', search_result)
                         if url_matches:
                             print(f"  🌐 提取首个结果详情...")

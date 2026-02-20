@@ -13,7 +13,7 @@ services:
   bridge-worker:
     build:
       context: .
-      dockerfile: Dockerfile.bridge
+      dockerfile: Dockerfile.worker
     container_name: openclaw-bridge-worker
     environment:
       - OPENCLAW_BRIDGE_URL=http://http-bridge:9848

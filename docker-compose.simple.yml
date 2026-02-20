@@ -22,5 +22,6 @@ services:
     volumes:
       - .:/app
     working_dir: /app
-    command: pip3 install aiohttp playwright mcp -q && python3 openclaw_bridge_worker.py
+    command: >
+      bash -c "pip3 install --no-cache-dir --disable-pip-version-check aiohttp playwright mcp -q 2>/dev/null || true && exec python3 openclaw_bridge_worker.py"
     restart: unless-stopped

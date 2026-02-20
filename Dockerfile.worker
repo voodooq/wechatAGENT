@@ -1,0 +1,13 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# 先安装依赖（构建时）
+RUN pip3 install --no-cache-dir --upgrade pip
+RUN pip3 install --no-cache-dir aiohttp playwright mcp
+
+# 复制代码
+COPY . .
+
+# 启动命令
+CMD ["python3", "openclaw_bridge_worker.py"]
